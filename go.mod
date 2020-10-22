@@ -21,7 +21,7 @@ require (
 	github.com/go-test/deep v0.0.0-20170429201529-f49763a6ea0a
 	github.com/golang/protobuf v1.0.0
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/jackc/pgx v3.2.0+incompatible
+	github.com/jackc/pgx v3.6.0+incompatible
 	github.com/jmespath/go-jmespath v0.0.0-20160803190731-bd40a432e4c7 // indirect
 	github.com/jteeuwen/go-bindata v3.0.8-0.20151023091102-a0ff2567cfb7+incompatible
 	github.com/karalabe/xgo v0.0.0-20180416083054-f99c776585a0 // indirect

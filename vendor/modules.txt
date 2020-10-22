@@ -93,7 +93,7 @@ github.com/golang/protobuf/proto
 # github.com/inconshreveable/mousetrap v1.0.0
 ## explicit
 github.com/inconshreveable/mousetrap
-# github.com/jackc/pgx v3.2.0+incompatible
+# github.com/jackc/pgx v3.6.0+incompatible
 ## explicit
 github.com/jackc/pgx
 github.com/jackc/pgx/chunkreader
@@ -128,6 +128,20 @@ github.com/spf13/pflag
 # github.com/theckman/goconstraint v1.10.1-0.20180216224824-e867bde6e4e1
 ## explicit
 github.com/theckman/goconstraint/go1.8/gte
+# golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+golang.org/x/crypto/pbkdf2
+# golang.org/x/text v0.3.0
+golang.org/x/text/cases
+golang.org/x/text/internal
+golang.org/x/text/internal/tag
+golang.org/x/text/language
+golang.org/x/text/runes
+golang.org/x/text/secure/bidirule
+golang.org/x/text/secure/precis
+golang.org/x/text/transform
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
+golang.org/x/text/width
 # golang.org/x/tools v0.0.0-20200507205054-480da3ebd79c
 ## explicit
 golang.org/x/tools/cover

@@ -3,77 +3,40 @@ package pgtype
 import (
 	"database/sql/driver"
 	"encoding/binary"
+	"net"
 
 	"github.com/jackc/pgx/pgio"
 	"github.com/pkg/errors"
 )
 
-type Int4Array struct {
-	Elements   []Int4
+type MacaddrArray struct {
+	Elements   []Macaddr
 	Dimensions []ArrayDimension
 	Status     Status
 }
 
-func (dst *Int4Array) Set(src interface{}) error {
+func (dst *MacaddrArray) Set(src interface{}) error {
 	// untyped nil and typed nil interfaces are different
 	if src == nil {
-		*dst = Int4Array{Status: Null}
+		*dst = MacaddrArray{Status: Null}
 		return nil
 	}
 
 	switch value := src.(type) {
 
-	case []int:
+	case []net.HardwareAddr:
 		if value == nil {
-			*dst = Int4Array{Status: Null}
+			*dst = MacaddrArray{Status: Null}
 		} else if len(value) == 0 {
-			*dst = Int4Array{Status: Present}
+			*dst = MacaddrArray{Status: Present}
 		} else {
-			elements := make([]Int4, len(value))
+			elements := make([]Macaddr, len(value))
 			for i := range value {
 				if err := elements[i].Set(value[i]); err != nil {
 					return err
 				}
 			}
-			*dst = Int4Array{
-				Elements:   elements,
-				Dimensions: []ArrayDimension{{Length: int32(len(elements)), LowerBound: 1}},
-				Status:     Present,
-			}
-		}
-
-	case []int32:
-		if value == nil {
-			*dst = Int4Array{Status: Null}
-		} else if len(value) == 0 {
-			*dst = Int4Array{Status: Present}
-		} else {
-			elements := make([]Int4, len(value))
-			for i := range value {
-				if err := elements[i].Set(value[i]); err != nil {
-					return err
-				}
-			}
-			*dst = Int4Array{
-				Elements:   elements,
-				Dimensions: []ArrayDimension{{Length: int32(len(elements)), LowerBound: 1}},
-				Status:     Present,
-			}
-		}
-
-	case []uint32:
-		if value == nil {
-			*dst = Int4Array{Status: Null}
-		} else if len(value) == 0 {
-			*dst = Int4Array{Status: Present}
-		} else {
-			elements := make([]Int4, len(value))
-			for i := range value {
-				if err := elements[i].Set(value[i]); err != nil {
-					return err
-				}
-			}
-			*dst = Int4Array{
+			*dst = MacaddrArray{
 				Elements:   elements,
 				Dimensions: []ArrayDimension{{Length: int32(len(elements)), LowerBound: 1}},
 				Status:     Present,
@@ -84,13 +47,13 @@ func (dst *Int4Array) Set(src interface{}) error {
 		if originalSrc, ok := underlyingSliceType(src); ok {
 			return dst.Set(originalSrc)
 		}
-		return errors.Errorf("cannot convert %v to Int4Array", value)
+		return errors.Errorf("cannot convert %v to MacaddrArray", value)
 	}
 
 	return nil
 }
 
-func (dst *Int4Array) Get() interface{} {
+func (dst *MacaddrArray) Get() interface{} {
 	switch dst.Status {
 	case Present:
 		return dst
@@ -101,22 +64,13 @@ func (dst *Int4Array) Get() interface{} {
 	}
 }
 
-func (src *Int4Array) AssignTo(dst interface{}) error {
+func (src *MacaddrArray) AssignTo(dst interface{}) error {
 	switch src.Status {
 	case Present:
 		switch v := dst.(type) {
 
-		case *[]int32:
-			*v = make([]int32, len(src.Elements))
-			for i := range src.Elements {
-				if err := src.Elements[i].AssignTo(&((*v)[i])); err != nil {
-					return err
-				}
-			}
-			return nil
-
-		case *[]uint32:
-			*v = make([]uint32, len(src.Elements))
+		case *[]net.HardwareAddr:
+			*v = make([]net.HardwareAddr, len(src.Elements))
 			for i := range src.Elements {
 				if err := src.Elements[i].AssignTo(&((*v)[i])); err != nil {
 					return err
@@ -136,9 +90,9 @@ func (src *Int4Array) AssignTo(dst interface{}) error {
 	return errors.Errorf("cannot decode %#v into %T", src, dst)
 }
 
-func (dst *Int4Array) DecodeText(ci *ConnInfo, src []byte) error {
+func (dst *MacaddrArray) DecodeText(ci *ConnInfo, src []byte) error {
 	if src == nil {
-		*dst = Int4Array{Status: Null}
+		*dst = MacaddrArray{Status: Null}
 		return nil
 	}
 
@@ -147,13 +101,13 @@ func (dst *Int4Array) DecodeText(ci *ConnInfo, src []byte) error {
 		return err
 	}
 
-	var elements []Int4
+	var elements []Macaddr
 
 	if len(uta.Elements) > 0 {
-		elements = make([]Int4, len(uta.Elements))
+		elements = make([]Macaddr, len(uta.Elements))
 
 		for i, s := range uta.Elements {
-			var elem Int4
+			var elem Macaddr
 			var elemSrc []byte
 			if s != "NULL" {
 				elemSrc = []byte(s)
@@ -167,14 +121,14 @@ func (dst *Int4Array) DecodeText(ci *ConnInfo, src []byte) error {
 		}
 	}
 
-	*dst = Int4Array{Elements: elements, Dimensions: uta.Dimensions, Status: Present}
+	*dst = MacaddrArray{Elements: elements, Dimensions: uta.Dimensions, Status: Present}
 
 	return nil
 }
 
-func (dst *Int4Array) DecodeBinary(ci *ConnInfo, src []byte) error {
+func (dst *MacaddrArray) DecodeBinary(ci *ConnInfo, src []byte) error {
 	if src == nil {
-		*dst = Int4Array{Status: Null}
+		*dst = MacaddrArray{Status: Null}
 		return nil
 	}
 
@@ -185,7 +139,7 @@ func (dst *Int4Array) DecodeBinary(ci *ConnInfo, src []byte) error {
 	}
 
 	if len(arrayHeader.Dimensions) == 0 {
-		*dst = Int4Array{Dimensions: arrayHeader.Dimensions, Status: Present}
+		*dst = MacaddrArray{Dimensions: arrayHeader.Dimensions, Status: Present}
 		return nil
 	}
 
@@ -194,7 +148,7 @@ func (dst *Int4Array) DecodeBinary(ci *ConnInfo, src []byte) error {
 		elementCount *= d.Length
 	}
 
-	elements := make([]Int4, elementCount)
+	elements := make([]Macaddr, elementCount)
 
 	for i := range elements {
 		elemLen := int(int32(binary.BigEndian.Uint32(src[rp:])))
@@ -210,11 +164,11 @@ func (dst *Int4Array) DecodeBinary(ci *ConnInfo, src []byte) error {
 		}
 	}
 
-	*dst = Int4Array{Elements: elements, Dimensions: arrayHeader.Dimensions, Status: Present}
+	*dst = MacaddrArray{Elements: elements, Dimensions: arrayHeader.Dimensions, Status: Present}
 	return nil
 }
 
-func (src *Int4Array) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error) {
+func (src *MacaddrArray) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error) {
 	switch src.Status {
 	case Null:
 		return nil, nil
@@ -271,7 +225,7 @@ func (src *Int4Array) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error) {
 	return buf, nil
 }
 
-func (src *Int4Array) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, error) {
+func (src *MacaddrArray) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, error) {
 	switch src.Status {
 	case Null:
 		return nil, nil
@@ -283,10 +237,10 @@ func (src *Int4Array) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, error) {
 		Dimensions: src.Dimensions,
 	}
 
-	if dt, ok := ci.DataTypeForName("int4"); ok {
+	if dt, ok := ci.DataTypeForName("macaddr"); ok {
 		arrayHeader.ElementOID = int32(dt.OID)
 	} else {
-		return nil, errors.Errorf("unable to find oid for type name %v", "int4")
+		return nil, errors.Errorf("unable to find oid for type name %v", "macaddr")
 	}
 
 	for i := range src.Elements {
@@ -316,7 +270,7 @@ func (src *Int4Array) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, error) {
 }
 
 // Scan implements the database/sql Scanner interface.
-func (dst *Int4Array) Scan(src interface{}) error {
+func (dst *MacaddrArray) Scan(src interface{}) error {
 	if src == nil {
 		return dst.DecodeText(nil, nil)
 	}
@@ -334,7 +288,7 @@ func (dst *Int4Array) Scan(src interface{}) error {
 }
 
 // Value implements the database/sql/driver Valuer interface.
-func (src *Int4Array) Value() (driver.Value, error) {
+func (src *MacaddrArray) Value() (driver.Value, error) {
 	buf, err := src.EncodeText(nil, nil)
 	if err != nil {
 		return nil, err
