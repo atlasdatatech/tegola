@@ -103,3 +103,7 @@ func (p *Provider) Layers() ([]provider.LayerInfo, error) {
 
 	return ls, nil
 }
+
+func (p *Provider) AddLayer(config dict.Dicter) error {
+	return nil
+}

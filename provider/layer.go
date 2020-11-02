@@ -1,6 +1,9 @@
 package provider
 
-import "github.com/go-spatial/geom"
+import (
+	"github.com/go-spatial/geom"
+	"github.com/go-spatial/tegola/dict"
+)
 
 // Layer holds information about a query.
 type Layer struct {
@@ -16,6 +19,7 @@ type Layer struct {
 type Layerer interface {
 	// Layers returns information about the various layers the provider supports
 	Layers() ([]LayerInfo, error)
+	AddLayer(config dict.Dicter) error
 }
 
 // LayerInfo is the important information about a layer

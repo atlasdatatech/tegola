@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 
@@ -503,6 +504,128 @@ func (p Provider) Layers() ([]provider.LayerInfo, error) {
 	}
 
 	return ls, nil
+}
+
+// AddLayer 添加驱动层
+func (p *Provider) AddLayer(layer dict.Dicter) error {
+	lname, err := layer.String(ConfigKeyLayerName, nil)
+	if err != nil {
+		return fmt.Errorf("AddLayer, we got the following error trying to get the layer's name field: %v", err)
+	}
+
+	if j, ok := p.layers[lname]; ok {
+		return fmt.Errorf("%v layer name is duplicated", lname, j)
+	}
+
+	if len(p.layers) == 0 {
+		p.firstlayer = lname
+	}
+
+	fields, err := layer.StringSlice(ConfigKeyFields)
+	if err != nil {
+		return fmt.Errorf("for layer (%v) %v field had the following error: %v", lname, ConfigKeyFields, err)
+	}
+
+	geomfld := "geom"
+	geomfld, err = layer.String(ConfigKeyGeomField, &geomfld)
+	if err != nil {
+		return fmt.Errorf("for layer (%v) : %v", lname, err)
+	}
+
+	idfld := ""
+	idfld, err = layer.String(ConfigKeyGeomIDField, &idfld)
+	if err != nil {
+		return fmt.Errorf("for layer (%v) : %v", lname, err)
+	}
+	if idfld == geomfld {
+		return fmt.Errorf("for layer %v: %v (%v) and %v field (%v) is the same", lname, ConfigKeyGeomField, geomfld, ConfigKeyGeomIDField, idfld)
+	}
+
+	geomType := ""
+	geomType, err = layer.String(ConfigKeyGeomType, &geomType)
+	if err != nil {
+		return fmt.Errorf("for layer  %v : %v", lname, err)
+	}
+
+	var tblName string
+	tblName, err = layer.String(ConfigKeyTablename, &lname)
+	if err != nil {
+		return fmt.Errorf("forlayer (%v) %v has an error: %v", lname, ConfigKeyTablename, err)
+	}
+
+	var sql string
+	sql, err = layer.String(ConfigKeySQL, &sql)
+	if err != nil {
+		return fmt.Errorf("for layer (%v) %v has an error: %v", lname, ConfigKeySQL, err)
+	}
+
+	if tblName != lname && sql != "" {
+		log.Printf("both %v and %v field are specified for layer (%v), using only %[2]v field.", ConfigKeyTablename, ConfigKeySQL, lname)
+	}
+
+	var lsrid = int(p.srid)
+	if lsrid, err = layer.Int(ConfigKeySRID, &lsrid); err != nil {
+		return err
+	}
+
+	l := Layer{
+		name:      lname,
+		idField:   idfld,
+		geomField: geomfld,
+		srid:      uint64(lsrid),
+	}
+
+	if sql != "" && !isSelectQuery.MatchString(sql) {
+		// if it is not a SELECT query, then we assume we have a sub-query
+		// (`(select ...) as foo`) which we can handle like a tablename
+		tblName = sql
+		sql = ""
+	}
+
+	if sql != "" {
+		// convert !BOX! (MapServer) and !bbox! (Mapnik) to !BBOX! for compatibility
+		sql := strings.Replace(strings.Replace(sql, "!BOX!", "!BBOX!", -1), "!bbox!", "!BBOX!", -1)
+		// make sure that the sql has a !BBOX! token
+		if !strings.Contains(sql, bboxToken) {
+			return fmt.Errorf("SQL for layer (%v) is missing required token: %v", lname, bboxToken)
+		}
+		if !strings.Contains(sql, "*") {
+			if !strings.Contains(sql, geomfld) {
+				return fmt.Errorf("SQL for layer (%v) does not contain the geometry field: %v", lname, geomfld)
+			}
+			if !strings.Contains(sql, idfld) {
+				return fmt.Errorf("SQL for layer (%v) does not contain the id field for the geometry: %v", lname, idfld)
+			}
+		}
+
+		l.sql = sql
+	} else {
+		// Tablename and Fields will be used to build the query.
+		// We need to do some work. We need to check to see Fields contains the geom and gid fields
+		// and if not add them to the list. If Fields list is empty/nil we will use '*' for the field list.
+		l.sql, err = genSQL(&l, p.pool, tblName, fields, true)
+		if err != nil {
+			return fmt.Errorf("could not generate sql, for layer(%v): %v", lname, err)
+		}
+	}
+
+	if strings.Contains(os.Getenv("TEGOLA_SQL_DEBUG"), "LAYER_SQL") {
+		log.Printf("SQL for Layer(%v):\n%v\n", lname, l.sql)
+	}
+
+	// set the layer geom type
+	if geomType != "" {
+		if err = p.setLayerGeomType(&l, geomType); err != nil {
+			return fmt.Errorf("error fetching geometry type for layer (%v): %v", l.name, err)
+		}
+	} else {
+		if err = p.inspectLayerGeomType(&l); err != nil {
+			return fmt.Errorf("error fetching geometry type for layer (%v): %v", l.name, err)
+		}
+	}
+
+	p.layers[lname] = l
+	return nil
 }
 
 // TileFeatures adheres to the provider.Tiler interface
