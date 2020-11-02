@@ -1,4 +1,4 @@
-module github.com/go-spatial/tegola
+module github.com/atlasdatatech/tegola
 
 go 1.14
 
