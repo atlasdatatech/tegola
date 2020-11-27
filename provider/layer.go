@@ -18,6 +18,7 @@ type Layer struct {
 // Layerer are objects that know about their layers
 type Layerer interface {
 	// Layers returns information about the various layers the provider supports
+	Layer(lryID string) (LayerInfo, bool)
 	Layers() ([]LayerInfo, error)
 	AddLayer(config dict.Dicter) error
 }

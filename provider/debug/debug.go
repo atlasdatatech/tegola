@@ -107,3 +107,18 @@ func (p *Provider) Layers() ([]provider.LayerInfo, error) {
 func (p *Provider) AddLayer(config dict.Dicter) error {
 	return nil
 }
+func (p *Provider) Layer(lryID string) (provider.LayerInfo, bool) {
+	layers := []Layer{
+		{
+			name:     "debug-tile-outline",
+			geomType: geom.Line{},
+			srid:     tegola.WebMercator,
+		},
+		{
+			name:     "debug-tile-center",
+			geomType: geom.Point{},
+			srid:     tegola.WebMercator,
+		},
+	}
+	return layers[0], true
+}

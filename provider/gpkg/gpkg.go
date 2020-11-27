@@ -61,6 +61,11 @@ type Provider struct {
 	db *sql.DB
 }
 
+func (p *Provider) Layer(lryID string) (provider.LayerInfo, bool) {
+	layer, ok := p.layers[lryID]
+	return layer, ok
+}
+
 func (p *Provider) Layers() ([]provider.LayerInfo, error) {
 	log.Debug("attempting gpkg.Layers()")
 

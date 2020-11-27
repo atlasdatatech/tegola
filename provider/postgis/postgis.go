@@ -486,7 +486,7 @@ func (p Provider) inspectLayerGeomType(l *Layer) error {
 
 // Layer fetches an individual layer from the provider, if it's configured
 // if no name is provider, the first layer is returned
-func (p *Provider) Layer(name string) (Layer, bool) {
+func (p *Provider) Layer(name string) (provider.LayerInfo, bool) {
 	if name == "" {
 		return p.layers[p.firstlayer], true
 	}
@@ -631,11 +631,12 @@ func (p *Provider) AddLayer(layer dict.Dicter) error {
 // TileFeatures adheres to the provider.Tiler interface
 func (p Provider) TileFeatures(ctx context.Context, layer string, tile provider.Tile, fn func(f *provider.Feature) error) error {
 	// fetch the provider layer
-	plyr, ok := p.Layer(layer)
+
+	lyr, ok := p.layers[layer]
 	if !ok {
 		return ErrLayerNotFound{layer}
 	}
-
+	plyr := Layer(lyr)
 	sql, err := replaceTokens(plyr.sql, &plyr, tile, true)
 	if err != nil {
 		return fmt.Errorf("error replacing layer tokens for layer (%v) SQL (%v): %v", layer, sql, err)
@@ -745,12 +746,13 @@ func (p Provider) MVTForLayers(ctx context.Context, tile provider.Tile, layers [
 		if debug {
 			log.Printf("looking for layer: %v", layers[i])
 		}
-		l, ok := p.Layer(layers[i].Name)
+		ll, ok := p.layers[layers[i].Name]
 		if !ok {
 			// Should we be erroring here, or have a flag so that we don't
 			// spam the user?
 			log.Printf("provider layer not found %v", layers[i].Name)
 		}
+		l := Layer(ll)
 		if debugLayerSQL {
 			log.Printf("SQL for Layer(%v):\n%v\n", l.Name(), l.sql)
 		}
