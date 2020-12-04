@@ -31,4 +31,6 @@ type LayerInfo interface {
 	GeomType() geom.Geometry
 	// SRID is the srid of all the points in the layer
 	SRID() uint64
+	// SRID is the srid of all the points in the layer
+	// Extent() geom.Extent
 }

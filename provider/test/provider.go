@@ -74,6 +74,16 @@ type TileProvider struct {
 	MVTTile []byte
 }
 
+//AddLayer xxx
+func (tp *TileProvider) AddLayer(config dict.Dicter) error {
+	return nil
+}
+
+//Layer xxx
+func (tp *TileProvider) Layer(lryID string) (provider.LayerInfo, bool) {
+	return nil, false
+}
+
 // Layers returns the configured layers, there is always only one "test-layer"
 func (tp *TileProvider) Layers() ([]provider.LayerInfo, error) {
 	return []provider.LayerInfo{

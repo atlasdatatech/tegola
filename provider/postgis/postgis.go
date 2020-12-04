@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx"
@@ -314,6 +315,7 @@ func CreateProvider(config dict.Dicter) (*Provider, error) {
 				return nil, fmt.Errorf("error fetching geometry type for layer (%v): %v", l.name, err)
 			}
 		} else {
+			p.inspectLayerExtent(&l)
 			if err = p.inspectLayerGeomType(&l); err != nil {
 				return nil, fmt.Errorf("error fetching geometry type for layer (%v): %v", l.name, err)
 			}
@@ -329,7 +331,7 @@ func CreateProvider(config dict.Dicter) (*Provider, error) {
 	return &p, nil
 }
 
-// derived from github.com/jackc/pgx configTLS (https://github.com/jackc/pgx/blob/master/conn.go)
+//ConfigTLS derived from github.com/jackc/pgx configTLS (https://github.com/jackc/pgx/blob/master/conn.go)
 func ConfigTLS(sslMode string, sslKey string, sslCert string, sslRootCert string, cc *pgx.ConnConfig) error {
 
 	switch sslMode {
@@ -422,15 +424,14 @@ func (p Provider) inspectLayerGeomType(l *Layer) error {
 	//
 	// case insensitive search
 	re := regexp.MustCompile(`(?i)ST_AsBinary`)
+
 	sql := re.ReplaceAllString(l.sql, "ST_GeometryType")
 
 	// we only need a single result set to sniff out the geometry type
 	sql = fmt.Sprintf("%v LIMIT 1", sql)
-
 	// if a !ZOOM! token exists, all features could be filtered out so we don't have a geometry to inspect it's type.
 	// address this by replacing the !ZOOM! token with an ANY statement which includes all zooms
 	sql = strings.Replace(sql, "!ZOOM!", "ANY('{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24}')", 1)
-
 	// we need a tile to run our sql through the replacer
 	tile := provider.NewTile(0, 0, 0, 64, tegola.WebMercator)
 
@@ -482,6 +483,59 @@ func (p Provider) inspectLayerGeomType(l *Layer) error {
 	}
 
 	return rows.Err()
+}
+
+// inspectLayerGeomType sets the geomType field on the layer by running the SQL
+// and reading the geom type in the result set
+func (p Provider) inspectLayerExtent(l *Layer) (*geom.Extent, error) {
+	var err error
+
+	//get geom column
+	re := regexp.MustCompile(`(?i)ST_AsBinary`)
+	idx := re.FindStringIndex(l.sql)
+	if 2 == len(idx) {
+		var rgx = regexp.MustCompile(`\((.*?)\)`)
+		rs := rgx.FindStringSubmatch(l.sql[idx[1]:])
+		if 2 == len(rs) {
+			l.geomField = rs[1]
+		}
+	}
+	var sql string
+	var rgx1 = regexp.MustCompile(`(?i)select(.*?)(?i)from`)
+	idx = rgx1.FindStringIndex(l.sql)
+	if 2 == len(idx) {
+		rps := fmt.Sprintf("SELECT ST_Extent(%s) FROM", l.geomField)
+		sql = strings.Replace(l.sql, l.sql[idx[0]:idx[1]], rps, 1)
+	}
+	sql = strings.Replace(sql, "!ZOOM!", "ANY('{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24}')", 1)
+	// we need a tile to run our sql through the replacer
+	tile := provider.NewTile(0, 0, 0, 64, tegola.WebMercator)
+	// normal replacer
+	sql, err = replaceTokens(sql, l, tile, true)
+	if err != nil {
+		return nil, err
+	}
+	row := p.pool.QueryRow(sql)
+	var box string
+	err = row.Scan(&box)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(box)
+	rgxbox := regexp.MustCompile(`(?i)BOX\((.*?)\)`)
+	rs := rgxbox.FindStringSubmatch(box)
+	if 2 == len(rs) {
+		f4 := strings.Split(rs[1], ",")
+		if 4 == len(f4) {
+			minx, _ := strconv.ParseFloat(f4[0], 64)
+			miny, _ := strconv.ParseFloat(f4[1], 64)
+			maxx, _ := strconv.ParseFloat(f4[2], 64)
+			maxy, _ := strconv.ParseFloat(f4[3], 64)
+			return &geom.Extent{minx, miny, maxx, maxy}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("inspect layer(%s) extent error", l.name)
 }
 
 // Layer fetches an individual layer from the provider, if it's configured

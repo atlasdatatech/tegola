@@ -29,6 +29,16 @@ func Cleanup() { Count = 0 }
 
 type TileProvider struct{}
 
+//AddLayer xxx
+func (tp *TileProvider) AddLayer(config dict.Dicter) error {
+	return nil
+}
+
+//Layer xxx
+func (tp *TileProvider) Layer(lryID string) (provider.LayerInfo, bool) {
+	return nil, false
+}
+
 func (tp *TileProvider) Layers() ([]provider.LayerInfo, error) {
 	return []provider.LayerInfo{
 		layer{

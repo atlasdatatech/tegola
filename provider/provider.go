@@ -131,6 +131,30 @@ func (tu TilerUnion) Layers() ([]LayerInfo, error) {
 	return nil, ErrNilInitFunc
 }
 
+// Layer return the layer of the Tiler. It will only return Std layers if
+// STD is defined other the MVT layers
+func (tu TilerUnion) Layer(lryID string) (LayerInfo, bool) {
+	if tu.Std != nil {
+		return tu.Std.Layer(lryID)
+	}
+	if tu.Mvt != nil {
+		return tu.Mvt.Layer(lryID)
+	}
+	return nil, false
+}
+
+// AddLayer add layer to the Tiler. It will only return Std layers if
+// STD is defined other the MVT layers
+func (tu TilerUnion) AddLayer(config dict.Dicter) error {
+	if tu.Std != nil {
+		return tu.Std.AddLayer(config)
+	}
+	if tu.Mvt != nil {
+		return tu.Mvt.AddLayer(config)
+	}
+	return ErrNilInitFunc
+}
+
 // InitFunc initialize a provider given a config map. The init function should validate the config map, and report any errors. This is called by the For function.
 type InitFunc func(dicter dict.Dicter) (Tiler, error)
 
