@@ -29,16 +29,6 @@ func Cleanup() { Count = 0 }
 
 type TileProvider struct{}
 
-//AddLayer xxx
-func (tp *TileProvider) AddLayer(config dict.Dicter) error {
-	return nil
-}
-
-//Layer xxx
-func (tp *TileProvider) Layer(lryID string) (provider.LayerInfo, bool) {
-	return nil, false
-}
-
 func (tp *TileProvider) Layers() ([]provider.LayerInfo, error) {
 	return []provider.LayerInfo{
 		layer{
@@ -61,4 +51,25 @@ func (tp *TileProvider) TileFeatures(ctx context.Context, layer string, t provid
 	}
 
 	return fn(&debugTileOutline)
+}
+
+//AddLayer xxx
+func (tp *TileProvider) AddLayer(config dict.Dicter) error {
+	return nil
+}
+
+// LayerExtent xxx
+func (tp *TileProvider) LayerExtent(lryID string) (geom.Extent, error) {
+	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
+	return ext, nil
+}
+
+// LayerMinZoom xxx
+func (tp *TileProvider) LayerMinZoom(lryID string) uint {
+	return 0
+}
+
+// LayerMaxZoom xxx
+func (tp *TileProvider) LayerMaxZoom(lryID string) uint {
+	return 20
 }

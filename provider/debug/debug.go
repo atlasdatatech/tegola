@@ -32,6 +32,7 @@ func NewTileProvider(config dict.Dicter) (provider.Tiler, error) {
 // Provider provides the debug provider
 type Provider struct{}
 
+// TileFeatures xxx
 func (p *Provider) TileFeatures(ctx context.Context, layer string, tile provider.Tile, fn func(f *provider.Feature) error) error {
 
 	// get tile bounding box
@@ -104,21 +105,23 @@ func (p *Provider) Layers() ([]provider.LayerInfo, error) {
 	return ls, nil
 }
 
+// AddLayer xxx
 func (p *Provider) AddLayer(config dict.Dicter) error {
 	return nil
 }
-func (p *Provider) Layer(lryID string) (provider.LayerInfo, bool) {
-	layers := []Layer{
-		{
-			name:     "debug-tile-outline",
-			geomType: geom.Line{},
-			srid:     tegola.WebMercator,
-		},
-		{
-			name:     "debug-tile-center",
-			geomType: geom.Point{},
-			srid:     tegola.WebMercator,
-		},
-	}
-	return layers[0], true
+
+// LayerExtent xxx
+func (p *Provider) LayerExtent(lryID string) (geom.Extent, error) {
+	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
+	return ext, nil
+}
+
+// LayerMinZoom xxx
+func (p *Provider) LayerMinZoom(lryID string) uint {
+	return 0
+}
+
+// LayerMaxZoom xxx
+func (p *Provider) LayerMaxZoom(lryID string) uint {
+	return 20
 }

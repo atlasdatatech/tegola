@@ -485,11 +485,11 @@ func (p Provider) inspectLayerGeomType(l *Layer) error {
 	return rows.Err()
 }
 
-// inspectLayerGeomType sets the geomType field on the layer by running the SQL
-// and reading the geom type in the result set
-func (p Provider) inspectLayerExtent(l *Layer) (*geom.Extent, error) {
+// inspectLayerExtent sets the geomType field on the layer by running the SQL
+// and reading the box2d the result set
+func (p Provider) inspectLayerExtent(l *Layer) (geom.Extent, error) {
 	var err error
-
+	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
 	//get geom column
 	re := regexp.MustCompile(`(?i)ST_AsBinary`)
 	idx := re.FindStringIndex(l.sql)
@@ -513,13 +513,13 @@ func (p Provider) inspectLayerExtent(l *Layer) (*geom.Extent, error) {
 	// normal replacer
 	sql, err = replaceTokens(sql, l, tile, true)
 	if err != nil {
-		return nil, err
+		return ext, err
 	}
 	row := p.pool.QueryRow(sql)
 	var box string
 	err = row.Scan(&box)
 	if err != nil {
-		return nil, err
+		return ext, err
 	}
 	fmt.Println(box)
 	rgxbox := regexp.MustCompile(`(?i)BOX\((.*?)\)`)
@@ -531,16 +531,120 @@ func (p Provider) inspectLayerExtent(l *Layer) (*geom.Extent, error) {
 			miny, _ := strconv.ParseFloat(f4[1], 64)
 			maxx, _ := strconv.ParseFloat(f4[2], 64)
 			maxy, _ := strconv.ParseFloat(f4[3], 64)
-			return &geom.Extent{minx, miny, maxx, maxy}, nil
+			return geom.Extent{minx, miny, maxx, maxy}, nil
 		}
 	}
 
-	return nil, fmt.Errorf("inspect layer(%s) extent error", l.name)
+	return ext, fmt.Errorf("inspect layer(%s) extent error", l.name)
+}
+
+// inspectLayerMinZoom inspect the minzoom of the layer
+func (p Provider) inspectLayerMinZoom(l *Layer) (geom.Extent, error) {
+	var err error
+	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
+	//get geom column
+	re := regexp.MustCompile(`(?i)ST_AsBinary`)
+	idx := re.FindStringIndex(l.sql)
+	if 2 == len(idx) {
+		var rgx = regexp.MustCompile(`\((.*?)\)`)
+		rs := rgx.FindStringSubmatch(l.sql[idx[1]:])
+		if 2 == len(rs) {
+			l.geomField = rs[1]
+		}
+	}
+	var sql string
+	var rgx1 = regexp.MustCompile(`(?i)select(.*?)(?i)from`)
+	idx = rgx1.FindStringIndex(l.sql)
+	if 2 == len(idx) {
+		rps := fmt.Sprintf("SELECT ST_Extent(%s) FROM", l.geomField)
+		sql = strings.Replace(l.sql, l.sql[idx[0]:idx[1]], rps, 1)
+	}
+	sql = strings.Replace(sql, "!ZOOM!", "ANY('{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24}')", 1)
+	// we need a tile to run our sql through the replacer
+	tile := provider.NewTile(0, 0, 0, 64, tegola.WebMercator)
+	// normal replacer
+	sql, err = replaceTokens(sql, l, tile, true)
+	if err != nil {
+		return ext, err
+	}
+	row := p.pool.QueryRow(sql)
+	var box string
+	err = row.Scan(&box)
+	if err != nil {
+		return ext, err
+	}
+	fmt.Println(box)
+	rgxbox := regexp.MustCompile(`(?i)BOX\((.*?)\)`)
+	rs := rgxbox.FindStringSubmatch(box)
+	if 2 == len(rs) {
+		f4 := strings.Split(rs[1], ",")
+		if 4 == len(f4) {
+			minx, _ := strconv.ParseFloat(f4[0], 64)
+			miny, _ := strconv.ParseFloat(f4[1], 64)
+			maxx, _ := strconv.ParseFloat(f4[2], 64)
+			maxy, _ := strconv.ParseFloat(f4[3], 64)
+			return geom.Extent{minx, miny, maxx, maxy}, nil
+		}
+	}
+
+	return ext, fmt.Errorf("inspect layer(%s) extent error", l.name)
+}
+
+// inspectLayerMaxZoom inspect the minzoom of the layer
+func (p Provider) inspectLayerMaxZoom(l *Layer) (geom.Extent, error) {
+	var err error
+	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
+	//get geom column
+	re := regexp.MustCompile(`(?i)ST_AsBinary`)
+	idx := re.FindStringIndex(l.sql)
+	if 2 == len(idx) {
+		var rgx = regexp.MustCompile(`\((.*?)\)`)
+		rs := rgx.FindStringSubmatch(l.sql[idx[1]:])
+		if 2 == len(rs) {
+			l.geomField = rs[1]
+		}
+	}
+	var sql string
+	var rgx1 = regexp.MustCompile(`(?i)select(.*?)(?i)from`)
+	idx = rgx1.FindStringIndex(l.sql)
+	if 2 == len(idx) {
+		rps := fmt.Sprintf("SELECT ST_Extent(%s) FROM", l.geomField)
+		sql = strings.Replace(l.sql, l.sql[idx[0]:idx[1]], rps, 1)
+	}
+	sql = strings.Replace(sql, "!ZOOM!", "ANY('{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24}')", 1)
+	// we need a tile to run our sql through the replacer
+	tile := provider.NewTile(0, 0, 0, 64, tegola.WebMercator)
+	// normal replacer
+	sql, err = replaceTokens(sql, l, tile, true)
+	if err != nil {
+		return ext, err
+	}
+	row := p.pool.QueryRow(sql)
+	var box string
+	err = row.Scan(&box)
+	if err != nil {
+		return ext, err
+	}
+	fmt.Println(box)
+	rgxbox := regexp.MustCompile(`(?i)BOX\((.*?)\)`)
+	rs := rgxbox.FindStringSubmatch(box)
+	if 2 == len(rs) {
+		f4 := strings.Split(rs[1], ",")
+		if 4 == len(f4) {
+			minx, _ := strconv.ParseFloat(f4[0], 64)
+			miny, _ := strconv.ParseFloat(f4[1], 64)
+			maxx, _ := strconv.ParseFloat(f4[2], 64)
+			maxy, _ := strconv.ParseFloat(f4[3], 64)
+			return geom.Extent{minx, miny, maxx, maxy}, nil
+		}
+	}
+
+	return ext, fmt.Errorf("inspect layer(%s) extent error", l.name)
 }
 
 // Layer fetches an individual layer from the provider, if it's configured
 // if no name is provider, the first layer is returned
-func (p *Provider) Layer(name string) (provider.LayerInfo, bool) {
+func (p *Provider) Layer(name string) (Layer, bool) {
 	if name == "" {
 		return p.layers[p.firstlayer], true
 	}
@@ -550,7 +654,7 @@ func (p *Provider) Layer(name string) (provider.LayerInfo, bool) {
 }
 
 // Layers returns meta data about the various layers which are configured with the provider
-func (p Provider) Layers() ([]provider.LayerInfo, error) {
+func (p *Provider) Layers() ([]provider.LayerInfo, error) {
 	var ls []provider.LayerInfo
 
 	for i := range p.layers {
@@ -558,6 +662,192 @@ func (p Provider) Layers() ([]provider.LayerInfo, error) {
 	}
 
 	return ls, nil
+}
+
+// TileFeatures adheres to the provider.Tiler interface
+func (p *Provider) TileFeatures(ctx context.Context, layer string, tile provider.Tile, fn func(f *provider.Feature) error) error {
+	// fetch the provider layer
+
+	plyr, ok := p.Layer(layer)
+	if !ok {
+		return ErrLayerNotFound{layer}
+	}
+	sql, err := replaceTokens(plyr.sql, &plyr, tile, true)
+	if err != nil {
+		return fmt.Errorf("error replacing layer tokens for layer (%v) SQL (%v): %v", layer, sql, err)
+	}
+
+	if debugExecuteSQL {
+		log.Printf("TEGOLA_SQL_DEBUG:EXECUTE_SQL for layer (%v): %v", layer, sql)
+	}
+
+	// context check
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	rows, err := p.pool.Query(sql)
+	if err != nil {
+		return fmt.Errorf("error running layer (%v) SQL (%v): %v", layer, sql, err)
+	}
+	defer rows.Close()
+
+	// fetch rows FieldDescriptions. this gives us the OID for the data types returned to aid in decoding
+	fdescs := rows.FieldDescriptions()
+
+	// loop our field descriptions looking for the geometry field
+	var geomFieldFound bool
+	for i := range fdescs {
+		if fdescs[i].Name == plyr.GeomFieldName() {
+			geomFieldFound = true
+			break
+		}
+	}
+	if !geomFieldFound {
+		return ErrGeomFieldNotFound{
+			GeomFieldName: plyr.GeomFieldName(),
+			LayerName:     plyr.Name(),
+		}
+	}
+
+	reportedLayerFieldName := ""
+	for rows.Next() {
+		// context check
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		// fetch row values
+		vals, err := rows.Values()
+		if err != nil {
+			return fmt.Errorf("error running layer (%v) SQL (%v): %v", layer, sql, err)
+		}
+
+		gid, geobytes, tags, err := decipherFields(ctx, plyr.GeomFieldName(), plyr.IDFieldName(), fdescs, vals)
+		if err != nil {
+			switch err {
+			case context.Canceled:
+				return err
+			default:
+				return fmt.Errorf("for layer (%v) %v", plyr.Name(), err)
+			}
+		}
+
+		// check that we have geometry data. if not, skip the feature
+		if len(geobytes) == 0 {
+			continue
+		}
+
+		// decode our WKB
+		geometry, err := wkb.DecodeBytes(geobytes)
+		if err != nil {
+			switch err.(type) {
+			case wkb.ErrUnknownGeometryType:
+				rplfn := layer + ":" + plyr.GeomFieldName()
+				// Only report to the log once. This is to prevent the logs from filling up if there are many geometries in the layer
+				if reportedLayerFieldName == "" || reportedLayerFieldName == rplfn {
+					reportedLayerFieldName = rplfn
+					log.Printf("[WARNING] Ignoring unsupported geometry in layer (%v). Only basic 2D geometry type are supported. Try using `ST_Force2D(%v)`.", layer, plyr.GeomFieldName())
+				}
+				continue
+			default:
+				return fmt.Errorf("unable to decode layer (%v) geometry field (%v) into wkb where (%v = %v): %v", layer, plyr.GeomFieldName(), plyr.IDFieldName(), gid, err)
+			}
+		}
+
+		feature := provider.Feature{
+			ID:       gid,
+			Geometry: geometry,
+			SRID:     plyr.SRID(),
+			Tags:     tags,
+		}
+
+		// pass the feature to the provided callback
+		if err = fn(&feature); err != nil {
+			return err
+		}
+	}
+
+	return rows.Err()
+}
+
+// MVTForLayers xxx
+func (p *Provider) MVTForLayers(ctx context.Context, tile provider.Tile, layers []provider.Layer) ([]byte, error) {
+	var (
+		err  error
+		sqls = make([]string, 0, len(layers))
+	)
+
+	for i := range layers {
+		if debug {
+			log.Printf("looking for layer: %v", layers[i])
+		}
+		l, ok := p.Layer(layers[i].Name)
+		if !ok {
+			// Should we be erroring here, or have a flag so that we don't
+			// spam the user?
+			log.Printf("provider layer not found %v", layers[i].Name)
+		}
+		if debugLayerSQL {
+			log.Printf("SQL for Layer(%v):\n%v\n", l.Name(), l.sql)
+		}
+		sql, err := replaceTokens(l.sql, &l, tile, false)
+		if err != nil {
+			return nil, err
+		}
+
+		// ref: https://postgis.net/docs/ST_AsMVT.html
+		// bytea ST_AsMVT(anyelement row, text name, integer extent, text geom_name, text feature_id_name)
+		sqls = append(sqls, fmt.Sprintf(
+			`(SELECT ST_AsMVT(q,'%s',%d,'%s','%s') AS data FROM (%s) AS q)`,
+			layers[i].MVTName,
+			tegola.DefaultExtent,
+			l.GeomFieldName(),
+			l.IDFieldName(),
+			sql,
+		))
+	}
+	subsqls := strings.Join(sqls, "||")
+	fsql := fmt.Sprintf(`SELECT (%s) AS data`, subsqls)
+	var data pgtype.Bytea
+	if debugExecuteSQL {
+		log.Printf("%s:%s: %v", EnvSQLDebugName, EnvSQLDebugExecute, fsql)
+	}
+	fmt.Println(fsql)
+	err = p.pool.QueryRow(fsql).Scan(&data)
+	if debugExecuteSQL {
+		log.Printf("%s:%s: %v", EnvSQLDebugName, EnvSQLDebugExecute, fsql)
+		if err != nil {
+			log.Printf("%s:%s: returned error %v", EnvSQLDebugName, EnvSQLDebugExecute, err)
+		} else {
+			log.Printf("%s:%s: returned %v bytes", EnvSQLDebugName, EnvSQLDebugExecute, len(data.Bytes))
+		}
+	}
+
+	// data may have garbage in it.
+	if err != nil {
+		return []byte{}, err
+	}
+	return data.Bytes, nil
+}
+
+// Close will close the Provider's database connectio
+func (p *Provider) Close() { p.pool.Close() }
+
+// reference to all instantiated providers
+var providers []Provider
+
+// Cleanup will close all database connections and destroy all previously instantiated Provider instances
+func Cleanup() {
+	if len(providers) > 0 {
+		log.Printf("cleaning up postgis providers")
+	}
+
+	for i := range providers {
+		providers[i].Close()
+	}
+
+	providers = make([]Provider, 0)
 }
 
 // AddLayer 添加驱动层
@@ -682,188 +972,22 @@ func (p *Provider) AddLayer(layer dict.Dicter) error {
 	return nil
 }
 
-// TileFeatures adheres to the provider.Tiler interface
-func (p Provider) TileFeatures(ctx context.Context, layer string, tile provider.Tile, fn func(f *provider.Feature) error) error {
-	// fetch the provider layer
-
-	lyr, ok := p.layers[layer]
+// LayerExtent xxx
+func (p *Provider) LayerExtent(lryID string) (geom.Extent, error) {
+	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
+	layer, ok := p.layers[lryID]
 	if !ok {
-		return ErrLayerNotFound{layer}
+		return ext, fmt.Errorf("layer id not exist")
 	}
-	plyr := Layer(lyr)
-	sql, err := replaceTokens(plyr.sql, &plyr, tile, true)
-	if err != nil {
-		return fmt.Errorf("error replacing layer tokens for layer (%v) SQL (%v): %v", layer, sql, err)
-	}
-
-	if debugExecuteSQL {
-		log.Printf("TEGOLA_SQL_DEBUG:EXECUTE_SQL for layer (%v): %v", layer, sql)
-	}
-
-	// context check
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	rows, err := p.pool.Query(sql)
-	if err != nil {
-		return fmt.Errorf("error running layer (%v) SQL (%v): %v", layer, sql, err)
-	}
-	defer rows.Close()
-
-	// fetch rows FieldDescriptions. this gives us the OID for the data types returned to aid in decoding
-	fdescs := rows.FieldDescriptions()
-
-	// loop our field descriptions looking for the geometry field
-	var geomFieldFound bool
-	for i := range fdescs {
-		if fdescs[i].Name == plyr.GeomFieldName() {
-			geomFieldFound = true
-			break
-		}
-	}
-	if !geomFieldFound {
-		return ErrGeomFieldNotFound{
-			GeomFieldName: plyr.GeomFieldName(),
-			LayerName:     plyr.Name(),
-		}
-	}
-
-	reportedLayerFieldName := ""
-	for rows.Next() {
-		// context check
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		// fetch row values
-		vals, err := rows.Values()
-		if err != nil {
-			return fmt.Errorf("error running layer (%v) SQL (%v): %v", layer, sql, err)
-		}
-
-		gid, geobytes, tags, err := decipherFields(ctx, plyr.GeomFieldName(), plyr.IDFieldName(), fdescs, vals)
-		if err != nil {
-			switch err {
-			case context.Canceled:
-				return err
-			default:
-				return fmt.Errorf("for layer (%v) %v", plyr.Name(), err)
-			}
-		}
-
-		// check that we have geometry data. if not, skip the feature
-		if len(geobytes) == 0 {
-			continue
-		}
-
-		// decode our WKB
-		geometry, err := wkb.DecodeBytes(geobytes)
-		if err != nil {
-			switch err.(type) {
-			case wkb.ErrUnknownGeometryType:
-				rplfn := layer + ":" + plyr.GeomFieldName()
-				// Only report to the log once. This is to prevent the logs from filling up if there are many geometries in the layer
-				if reportedLayerFieldName == "" || reportedLayerFieldName == rplfn {
-					reportedLayerFieldName = rplfn
-					log.Printf("[WARNING] Ignoring unsupported geometry in layer (%v). Only basic 2D geometry type are supported. Try using `ST_Force2D(%v)`.", layer, plyr.GeomFieldName())
-				}
-				continue
-			default:
-				return fmt.Errorf("unable to decode layer (%v) geometry field (%v) into wkb where (%v = %v): %v", layer, plyr.GeomFieldName(), plyr.IDFieldName(), gid, err)
-			}
-		}
-
-		feature := provider.Feature{
-			ID:       gid,
-			Geometry: geometry,
-			SRID:     plyr.SRID(),
-			Tags:     tags,
-		}
-
-		// pass the feature to the provided callback
-		if err = fn(&feature); err != nil {
-			return err
-		}
-	}
-
-	return rows.Err()
+	return p.inspectLayerExtent(&layer)
 }
 
-func (p Provider) MVTForLayers(ctx context.Context, tile provider.Tile, layers []provider.Layer) ([]byte, error) {
-	var (
-		err  error
-		sqls = make([]string, 0, len(layers))
-	)
-
-	for i := range layers {
-		if debug {
-			log.Printf("looking for layer: %v", layers[i])
-		}
-		ll, ok := p.layers[layers[i].Name]
-		if !ok {
-			// Should we be erroring here, or have a flag so that we don't
-			// spam the user?
-			log.Printf("provider layer not found %v", layers[i].Name)
-		}
-		l := Layer(ll)
-		if debugLayerSQL {
-			log.Printf("SQL for Layer(%v):\n%v\n", l.Name(), l.sql)
-		}
-		sql, err := replaceTokens(l.sql, &l, tile, false)
-		if err != nil {
-			return nil, err
-		}
-
-		// ref: https://postgis.net/docs/ST_AsMVT.html
-		// bytea ST_AsMVT(anyelement row, text name, integer extent, text geom_name, text feature_id_name)
-		sqls = append(sqls, fmt.Sprintf(
-			`(SELECT ST_AsMVT(q,'%s',%d,'%s','%s') AS data FROM (%s) AS q)`,
-			layers[i].MVTName,
-			tegola.DefaultExtent,
-			l.GeomFieldName(),
-			l.IDFieldName(),
-			sql,
-		))
-	}
-	subsqls := strings.Join(sqls, "||")
-	fsql := fmt.Sprintf(`SELECT (%s) AS data`, subsqls)
-	var data pgtype.Bytea
-	if debugExecuteSQL {
-		log.Printf("%s:%s: %v", EnvSQLDebugName, EnvSQLDebugExecute, fsql)
-	}
-	err = p.pool.QueryRow(fsql).Scan(&data)
-	if debugExecuteSQL {
-		log.Printf("%s:%s: %v", EnvSQLDebugName, EnvSQLDebugExecute, fsql)
-		if err != nil {
-			log.Printf("%s:%s: returned error %v", EnvSQLDebugName, EnvSQLDebugExecute, err)
-		} else {
-			log.Printf("%s:%s: returned %v bytes", EnvSQLDebugName, EnvSQLDebugExecute, len(data.Bytes))
-		}
-	}
-
-	// data may have garbage in it.
-	if err != nil {
-		return []byte{}, err
-	}
-	return data.Bytes, nil
+// LayerMinZoom xxx
+func (p *Provider) LayerMinZoom(lryID string) uint {
+	return 0
 }
 
-// Close will close the Provider's database connectio
-func (p *Provider) Close() { p.pool.Close() }
-
-// reference to all instantiated providers
-var providers []Provider
-
-// Cleanup will close all database connections and destroy all previously instantiated Provider instances
-func Cleanup() {
-	if len(providers) > 0 {
-		log.Printf("cleaning up postgis providers")
-	}
-
-	for i := range providers {
-		providers[i].Close()
-	}
-
-	providers = make([]Provider, 0)
+// LayerMaxZoom xxx
+func (p *Provider) LayerMaxZoom(lryID string) uint {
+	return 20
 }

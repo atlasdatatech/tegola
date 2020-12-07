@@ -18,9 +18,13 @@ type Layer struct {
 // Layerer are objects that know about their layers
 type Layerer interface {
 	// Layers returns information about the various layers the provider supports
-	Layer(lryID string) (LayerInfo, bool)
 	Layers() ([]LayerInfo, error)
 	AddLayer(config dict.Dicter) error
+
+	// SRID is the srid of all the points in the layer
+	LayerExtent(lryID string) (geom.Extent, error)
+	LayerMinZoom(lryID string) uint
+	LayerMaxZoom(lryID string) uint
 }
 
 // LayerInfo is the important information about a layer
@@ -31,6 +35,4 @@ type LayerInfo interface {
 	GeomType() geom.Geometry
 	// SRID is the srid of all the points in the layer
 	SRID() uint64
-	// SRID is the srid of all the points in the layer
-	// Extent() geom.Extent
 }
