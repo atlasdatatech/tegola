@@ -23,8 +23,8 @@ type Layerer interface {
 
 	// SRID is the srid of all the points in the layer
 	LayerExtent(lryID string) (geom.Extent, error)
-	LayerMinZoom(lryID string) uint
-	LayerMaxZoom(lryID string) uint
+	LayerMinZoom(lryID string) int
+	LayerMaxZoom(lryID string) int
 }
 
 // LayerInfo is the important information about a layer

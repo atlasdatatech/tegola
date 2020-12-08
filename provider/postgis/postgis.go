@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"regexp"
 	"strconv"
@@ -315,7 +316,10 @@ func CreateProvider(config dict.Dicter) (*Provider, error) {
 				return nil, fmt.Errorf("error fetching geometry type for layer (%v): %v", l.name, err)
 			}
 		} else {
-			p.inspectLayerExtent(&l)
+			// bbox, _ := p.inspectLayerExtent(&l)
+			// minz := p.inspectLayerMaxZoom(&l)
+			// maxz := p.inspectLayerMinZoom(&l)
+			// fmt.Println(bbox, minz, maxz)
 			if err = p.inspectLayerGeomType(&l); err != nil {
 				return nil, fmt.Errorf("error fetching geometry type for layer (%v): %v", l.name, err)
 			}
@@ -521,16 +525,17 @@ func (p Provider) inspectLayerExtent(l *Layer) (geom.Extent, error) {
 	if err != nil {
 		return ext, err
 	}
-	fmt.Println(box)
 	rgxbox := regexp.MustCompile(`(?i)BOX\((.*?)\)`)
 	rs := rgxbox.FindStringSubmatch(box)
 	if 2 == len(rs) {
-		f4 := strings.Split(rs[1], ",")
-		if 4 == len(f4) {
-			minx, _ := strconv.ParseFloat(f4[0], 64)
-			miny, _ := strconv.ParseFloat(f4[1], 64)
-			maxx, _ := strconv.ParseFloat(f4[2], 64)
-			maxy, _ := strconv.ParseFloat(f4[3], 64)
+		box := strings.Split(rs[1], ",")
+		if 2 == len(box) {
+			min := strings.Split(box[0], " ")
+			max := strings.Split(box[1], " ")
+			minx, _ := strconv.ParseFloat(min[0], 64)
+			miny, _ := strconv.ParseFloat(min[1], 64)
+			maxx, _ := strconv.ParseFloat(max[0], 64)
+			maxy, _ := strconv.ParseFloat(max[1], 64)
 			return geom.Extent{minx, miny, maxx, maxy}, nil
 		}
 	}
@@ -539,107 +544,56 @@ func (p Provider) inspectLayerExtent(l *Layer) (geom.Extent, error) {
 }
 
 // inspectLayerMinZoom inspect the minzoom of the layer
-func (p Provider) inspectLayerMinZoom(l *Layer) (geom.Extent, error) {
-	var err error
-	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
-	//get geom column
-	re := regexp.MustCompile(`(?i)ST_AsBinary`)
-	idx := re.FindStringIndex(l.sql)
-	if 2 == len(idx) {
-		var rgx = regexp.MustCompile(`\((.*?)\)`)
-		rs := rgx.FindStringSubmatch(l.sql[idx[1]:])
-		if 2 == len(rs) {
-			l.geomField = rs[1]
-		}
-	}
-	var sql string
-	var rgx1 = regexp.MustCompile(`(?i)select(.*?)(?i)from`)
-	idx = rgx1.FindStringIndex(l.sql)
-	if 2 == len(idx) {
-		rps := fmt.Sprintf("SELECT ST_Extent(%s) FROM", l.geomField)
-		sql = strings.Replace(l.sql, l.sql[idx[0]:idx[1]], rps, 1)
-	}
-	sql = strings.Replace(sql, "!ZOOM!", "ANY('{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24}')", 1)
-	// we need a tile to run our sql through the replacer
-	tile := provider.NewTile(0, 0, 0, 64, tegola.WebMercator)
-	// normal replacer
-	sql, err = replaceTokens(sql, l, tile, true)
+func (p Provider) inspectLayerMinZoom(l *Layer) int {
+	minzoom := 0
+	bound, err := p.inspectLayerExtent(l)
 	if err != nil {
-		return ext, err
+		return minzoom
 	}
-	row := p.pool.QueryRow(sql)
-	var box string
-	err = row.Scan(&box)
-	if err != nil {
-		return ext, err
-	}
-	fmt.Println(box)
-	rgxbox := regexp.MustCompile(`(?i)BOX\((.*?)\)`)
-	rs := rgxbox.FindStringSubmatch(box)
-	if 2 == len(rs) {
-		f4 := strings.Split(rs[1], ",")
-		if 4 == len(f4) {
-			minx, _ := strconv.ParseFloat(f4[0], 64)
-			miny, _ := strconv.ParseFloat(f4[1], 64)
-			maxx, _ := strconv.ParseFloat(f4[2], 64)
-			maxy, _ := strconv.ParseFloat(f4[3], 64)
-			return geom.Extent{minx, miny, maxx, maxy}, nil
-		}
-	}
-
-	return ext, fmt.Errorf("inspect layer(%s) extent error", l.name)
+	return provider.GetBoundZoomLevel(bound, 1920, 1080)
 }
 
 // inspectLayerMaxZoom inspect the minzoom of the layer
-func (p Provider) inspectLayerMaxZoom(l *Layer) (geom.Extent, error) {
-	var err error
-	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
-	//get geom column
-	re := regexp.MustCompile(`(?i)ST_AsBinary`)
-	idx := re.FindStringIndex(l.sql)
-	if 2 == len(idx) {
-		var rgx = regexp.MustCompile(`\((.*?)\)`)
-		rs := rgx.FindStringSubmatch(l.sql[idx[1]:])
-		if 2 == len(rs) {
-			l.geomField = rs[1]
+func (p Provider) inspectLayerMaxZoom(l *Layer) int {
+	maxZoom := 16
+	bound, err := p.inspectLayerExtent(l)
+	if err != nil {
+		return maxZoom
+	}
+	minZoom := provider.GetBoundZoomLevel(bound, 1920, 1080)
+	cx := (bound.MinX() + bound.MaxX()) / 2.0
+	cy := (bound.MinY() + bound.MaxY()) / 2.0
+	z := minZoom
+	for ; z < maxZoom; z++ {
+		tx := uint(math.Floor((cx + 180.0) / 360.0 * (math.Exp2(float64(z)))))
+		ty := uint(math.Floor((1.0 - math.Log(math.Tan(cy*math.Pi/180.0)+1.0/math.Cos(cy*math.Pi/180.0))/math.Pi) / 2.0 * (math.Exp2(float64(z)))))
+		//get geom column
+		var sql string
+		var rgx1 = regexp.MustCompile(`(?i)select(.*?)(?i)from`)
+		idx := rgx1.FindStringIndex(l.sql)
+		if 2 == len(idx) {
+			rps := "SELECT COUNT(*) FROM"
+			sql = strings.Replace(l.sql, l.sql[idx[0]:idx[1]], rps, 1)
+		}
+		sql = strings.Replace(sql, "!ZOOM!", "ANY('{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24}')", 1)
+		// we need a tile to run our sql through the replacer
+		tile := provider.NewTile(uint(z), tx, ty, 64, tegola.WebMercator)
+		// normal replacer
+		sql, err = replaceTokens(sql, l, tile, true)
+		if err != nil {
+			return maxZoom
+		}
+		row := p.pool.QueryRow(sql)
+		var cnt int
+		err = row.Scan(&cnt)
+		if err != nil {
+			return maxZoom
+		}
+		if cnt < 1024 {
+			return z
 		}
 	}
-	var sql string
-	var rgx1 = regexp.MustCompile(`(?i)select(.*?)(?i)from`)
-	idx = rgx1.FindStringIndex(l.sql)
-	if 2 == len(idx) {
-		rps := fmt.Sprintf("SELECT ST_Extent(%s) FROM", l.geomField)
-		sql = strings.Replace(l.sql, l.sql[idx[0]:idx[1]], rps, 1)
-	}
-	sql = strings.Replace(sql, "!ZOOM!", "ANY('{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24}')", 1)
-	// we need a tile to run our sql through the replacer
-	tile := provider.NewTile(0, 0, 0, 64, tegola.WebMercator)
-	// normal replacer
-	sql, err = replaceTokens(sql, l, tile, true)
-	if err != nil {
-		return ext, err
-	}
-	row := p.pool.QueryRow(sql)
-	var box string
-	err = row.Scan(&box)
-	if err != nil {
-		return ext, err
-	}
-	fmt.Println(box)
-	rgxbox := regexp.MustCompile(`(?i)BOX\((.*?)\)`)
-	rs := rgxbox.FindStringSubmatch(box)
-	if 2 == len(rs) {
-		f4 := strings.Split(rs[1], ",")
-		if 4 == len(f4) {
-			minx, _ := strconv.ParseFloat(f4[0], 64)
-			miny, _ := strconv.ParseFloat(f4[1], 64)
-			maxx, _ := strconv.ParseFloat(f4[2], 64)
-			maxy, _ := strconv.ParseFloat(f4[3], 64)
-			return geom.Extent{minx, miny, maxx, maxy}, nil
-		}
-	}
-
-	return ext, fmt.Errorf("inspect layer(%s) extent error", l.name)
+	return maxZoom
 }
 
 // Layer fetches an individual layer from the provider, if it's configured
@@ -813,7 +767,6 @@ func (p *Provider) MVTForLayers(ctx context.Context, tile provider.Tile, layers 
 	if debugExecuteSQL {
 		log.Printf("%s:%s: %v", EnvSQLDebugName, EnvSQLDebugExecute, fsql)
 	}
-	fmt.Println(fsql)
 	err = p.pool.QueryRow(fsql).Scan(&data)
 	if debugExecuteSQL {
 		log.Printf("%s:%s: %v", EnvSQLDebugName, EnvSQLDebugExecute, fsql)
@@ -983,11 +936,21 @@ func (p *Provider) LayerExtent(lryID string) (geom.Extent, error) {
 }
 
 // LayerMinZoom xxx
-func (p *Provider) LayerMinZoom(lryID string) uint {
-	return 0
+func (p *Provider) LayerMinZoom(lryID string) int {
+	minZoom := 0
+	layer, ok := p.layers[lryID]
+	if !ok {
+		return minZoom
+	}
+	return p.inspectLayerMinZoom(&layer)
 }
 
 // LayerMaxZoom xxx
-func (p *Provider) LayerMaxZoom(lryID string) uint {
-	return 20
+func (p *Provider) LayerMaxZoom(lryID string) int {
+	maxZoom := 16
+	layer, ok := p.layers[lryID]
+	if !ok {
+		return maxZoom
+	}
+	return p.inspectLayerMaxZoom(&layer)
 }

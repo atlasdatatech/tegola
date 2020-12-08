@@ -123,11 +123,11 @@ func (tp *TileProvider) LayerExtent(lryID string) (geom.Extent, error) {
 }
 
 // LayerMinZoom xxx
-func (tp *TileProvider) LayerMinZoom(lryID string) uint {
+func (tp *TileProvider) LayerMinZoom(lryID string) int {
 	return 0
 }
 
 // LayerMaxZoom xxx
-func (tp *TileProvider) LayerMaxZoom(lryID string) uint {
-	return 20
+func (tp *TileProvider) LayerMaxZoom(lryID string) int {
+	return 16
 }

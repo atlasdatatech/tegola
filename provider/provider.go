@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/go-spatial/geom"
 	"github.com/go-spatial/geom/slippy"
@@ -271,4 +272,41 @@ func (tu TilerUnion) AddLayer(config dict.Dicter) error {
 		return tu.Mvt.AddLayer(config)
 	}
 	return ErrNilInitFunc
+}
+
+//GetBoundZoomLevel xxx
+func GetBoundZoomLevel(bound geom.Extent, mapWidthPx, mapHeighPx int) int {
+	const LN2 float64 = 0.6931471805599453
+	const WorldPxHeight int = 256
+	const WorldPxWidth int = 256
+	const ZoomMax int = 21
+
+	latRad := func(lat float64) float64 {
+		sin := math.Sin(lat * math.Pi / 180)
+		radX2 := math.Log((1+sin)/(1-sin)) / 2
+		return math.Max(math.Min(radX2, math.Pi), -math.Pi) / 2
+	}
+	zoom := func(mapPx, worldPx int, fraction float64) float64 {
+		return math.Floor(math.Log(float64(mapPx)/float64(worldPx)/fraction) / LN2)
+	}
+
+	maxy := bound.MaxY()
+	miny := bound.MinY()
+	latFraction := (latRad(maxy) - latRad(miny)) / math.Pi
+	lngDiff := bound.MaxX() - bound.MinX()
+
+	if lngDiff < 0 {
+		lngDiff = lngDiff + 360
+	}
+	lngFraction := lngDiff / 360
+	latZoom := zoom(mapHeighPx, WorldPxHeight, latFraction)
+	lngZoom := zoom(mapWidthPx, WorldPxWidth, lngFraction)
+
+	rzoom := math.Min(math.Floor(latZoom), math.Floor(lngZoom))
+
+	if int(rzoom) > ZoomMax {
+		return ZoomMax
+	}
+
+	return int(rzoom)
 }
