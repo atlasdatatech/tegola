@@ -274,6 +274,40 @@ func (tu TilerUnion) AddLayer(config dict.Dicter) error {
 	return ErrNilInitFunc
 }
 
+//LayerExtent xxx
+func (tu TilerUnion) LayerExtent(lryID string) (geom.Extent, error) {
+	if tu.Std != nil {
+		return tu.Std.LayerExtent(lryID)
+	}
+	if tu.Mvt != nil {
+		return tu.Mvt.LayerExtent(lryID)
+	}
+	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
+	return ext, ErrNilInitFunc
+}
+
+//LayerMinZoom xxx
+func (tu TilerUnion) LayerMinZoom(lryID string) int {
+	if tu.Std != nil {
+		return tu.Std.LayerMinZoom(lryID)
+	}
+	if tu.Mvt != nil {
+		return tu.Mvt.LayerMinZoom(lryID)
+	}
+	return 0
+}
+
+//LayerMaxZoom xxx
+func (tu TilerUnion) LayerMaxZoom(lryID string) int {
+	if tu.Std != nil {
+		return tu.Std.LayerMaxZoom(lryID)
+	}
+	if tu.Mvt != nil {
+		return tu.Mvt.LayerMaxZoom(lryID)
+	}
+	return 16
+}
+
 //GetBoundZoomLevel xxx
 func GetBoundZoomLevel(bound geom.Extent, mapWidthPx, mapHeighPx int) int {
 	const LN2 float64 = 0.6931471805599453
