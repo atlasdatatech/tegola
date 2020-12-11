@@ -57,8 +57,8 @@ type Map struct {
 	TileExtent uint64
 	TileBuffer uint64
 
-	mvtProviderName string
-	mvtProvider     provider.MVTTiler
+	mvtProviderID string
+	mvtProvider   provider.MVTTiler
 }
 
 // HasMVTProvider indicates if map is a mvt provider based map
@@ -67,12 +67,12 @@ func (m Map) HasMVTProvider() bool { return m.mvtProvider != nil }
 // MVTProvider returns the mvt provider if this map is a mvt provider based map, otherwise nil
 func (m Map) MVTProvider() provider.MVTTiler { return m.mvtProvider }
 
-// MVTProviderName returns the mvt provider name if this map is a mvt provider based map, otherwise ""
-func (m Map) MVTProviderName() string { return m.mvtProviderName }
+// MVTProviderID returns the mvt provider name if this map is a mvt provider based map, otherwise ""
+func (m Map) MVTProviderID() string { return m.mvtProviderID }
 
 // SetMVTProvider sets the map to be based on the passed in mvt provider, and returning the provider
-func (m *Map) SetMVTProvider(name string, p provider.MVTTiler) provider.MVTTiler {
-	m.mvtProviderName = name
+func (m *Map) SetMVTProvider(prdID string, p provider.MVTTiler) provider.MVTTiler {
+	m.mvtProviderID = prdID
 	m.mvtProvider = p
 	return p
 }
@@ -94,20 +94,22 @@ func (m Map) AddDebugLayers() Map {
 
 	m.Layers = append(layers, []Layer{
 		{
-			Name:              debug.LayerDebugTileOutline,
-			ProviderLayerName: debug.LayerDebugTileOutline,
-			Provider:          debugProvider,
-			GeomType:          geom.LineString{},
-			MinZoom:           0,
-			MaxZoom:           MaxZoom,
+			ID:              debug.LayerDebugTileOutline,
+			Name:            debug.LayerDebugTileOutline,
+			ProviderLayerID: debug.LayerDebugTileOutline,
+			Provider:        debugProvider,
+			GeomType:        geom.LineString{},
+			MinZoom:         0,
+			MaxZoom:         MaxZoom,
 		},
 		{
-			Name:              debug.LayerDebugTileCenter,
-			ProviderLayerName: debug.LayerDebugTileCenter,
-			Provider:          debugProvider,
-			GeomType:          geom.Point{},
-			MinZoom:           0,
-			MaxZoom:           MaxZoom,
+			ID:              debug.LayerDebugTileCenter,
+			Name:            debug.LayerDebugTileCenter,
+			ProviderLayerID: debug.LayerDebugTileCenter,
+			Provider:        debugProvider,
+			GeomType:        geom.Point{},
+			MinZoom:         0,
+			MaxZoom:         MaxZoom,
 		},
 	}...)
 
@@ -131,17 +133,17 @@ func (m Map) FilterLayersByZoom(zoom uint) Map {
 	return m
 }
 
-// FilterLayersByName returns a copy of a Map with a subset of layers that match the supplied list of layer names
-func (m Map) FilterLayersByName(names ...string) Map {
+// FilterLayersByID returns a copy of a Map with a subset of layers that match the supplied list of layer names
+func (m Map) FilterLayersByID(ids ...string) Map {
 	var layers []Layer
 
-	nameStr := strings.Join(names, ",")
+	idStr := strings.Join(ids, ",")
 	for i := range m.Layers {
 		// if we have a name set, use it for the lookup
-		if m.Layers[i].Name != "" && strings.Contains(nameStr, m.Layers[i].Name) {
+		if m.Layers[i].ID != "" && strings.Contains(idStr, m.Layers[i].ID) {
 			layers = append(layers, m.Layers[i])
 			continue
-		} else if m.Layers[i].ProviderLayerName != "" && strings.Contains(nameStr, m.Layers[i].ProviderLayerName) { // default to using the ProviderLayerName for the lookup
+		} else if m.Layers[i].ProviderLayerID != "" && strings.Contains(idStr, m.Layers[i].ProviderLayerID) { // default to using the ProviderLayerName for the lookup
 			layers = append(layers, m.Layers[i])
 			continue
 		}
@@ -160,7 +162,7 @@ func (m Map) encodeMVTProviderTile(ctx context.Context, tile *slippy.Tile) ([]by
 	layers := make([]provider.Layer, len(m.Layers))
 	for i := range m.Layers {
 		layers[i] = provider.Layer{
-			Name:    m.Layers[i].ProviderLayerName,
+			ID:      m.Layers[i].ID,
 			MVTName: m.Layers[i].MVTName(),
 		}
 	}
@@ -199,7 +201,7 @@ func (m Map) encodeMVTTile(ctx context.Context, tile *slippy.Tile) ([]byte, erro
 				uint(m.TileBuffer), uint(m.SRID))
 
 			// fetch layer from data provider
-			err := l.Provider.TileFeatures(ctx, l.ProviderLayerName, ptile, func(f *provider.Feature) error {
+			err := l.Provider.TileFeatures(ctx, l.ProviderLayerID, ptile, func(f *provider.Feature) error {
 				// skip row if geometry collection empty.
 				g, ok := f.Geometry.(geom.Collection)
 				if ok && len(g.Geometries()) == 0 {

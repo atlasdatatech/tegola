@@ -7,8 +7,8 @@ import (
 
 // Layer holds information about a query.
 type Layer struct {
-	// Name is the name of the Layer as recognized by the provider
-	Name string
+	// ID is the name of the Layer as recognized by the provider
+	ID string
 	// MVTName is the name of the layer to encode into the MVT.
 	// this is often used when different provider layers are used
 	// at different zoom levels but the MVT layer name is consistent
@@ -18,6 +18,7 @@ type Layer struct {
 // Layerer are objects that know about their layers
 type Layerer interface {
 	// Layers returns information about the various layers the provider supports
+	Layer(lryID string) (LayerInfo, bool)
 	Layers() ([]LayerInfo, error)
 	AddLayer(config dict.Dicter) error
 
@@ -29,6 +30,8 @@ type Layerer interface {
 
 // LayerInfo is the important information about a layer
 type LayerInfo interface {
+	// ID is the id of the layer
+	ID() string
 	// Name is the name of the layer
 	Name() string
 	// GeomType is the geometry type of the layer

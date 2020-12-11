@@ -7,10 +7,11 @@ import (
 
 type Layer struct {
 	// optional. if not set, the ProviderLayerName will be used
-	Name              string
-	ProviderLayerName string
-	MinZoom           uint
-	MaxZoom           uint
+	ID              string
+	Name            string
+	ProviderLayerID string
+	MinZoom         uint
+	MaxZoom         uint
 	// instantiated provider
 	Provider provider.Tiler
 	// default tags to include when encoding the layer. provider tags take precedence
@@ -29,6 +30,9 @@ func (l *Layer) MVTName() string {
 	if l.Name != "" {
 		return l.Name
 	}
-
-	return l.ProviderLayerName
+	linfo, ok := l.Provider.Layer(l.ID)
+	if ok {
+		return linfo.Name()
+	}
+	return l.ID
 }

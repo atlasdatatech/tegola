@@ -129,7 +129,7 @@ func (req HandleMapLayerZXY) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.layerName != "" {
-		m = m.FilterLayersByName(req.layerName)
+		m = m.FilterLayersByID(req.layerName)
 		if len(m.Layers) == 0 {
 			logAndError(w, http.StatusNotFound, "map (%v) has no layers, for LayerName %v at zoom %v", req.mapName, req.layerName, req.z)
 			return

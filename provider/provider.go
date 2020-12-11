@@ -111,7 +111,7 @@ type Tiler interface {
 
 	// TileFeature will stream decoded features to the callback function fn
 	// if fn returns ErrCanceled, the TileFeatures method should stop processing
-	TileFeatures(ctx context.Context, layer string, t Tile, fn func(f *Feature) error) error
+	TileFeatures(ctx context.Context, lyrID string, t Tile, fn func(f *Feature) error) error
 }
 
 // TilerUnion represents either a Std Tiler or and MVTTiler; only one should be not nil.
@@ -262,6 +262,18 @@ func Cleanup() {
 	}
 }
 
+// Layer return the layers of the Tiler. It will only return Std layers if
+// STD is defined other the MVT layers
+func (tu TilerUnion) Layer(lyrID string) (LayerInfo, bool) {
+	if tu.Std != nil {
+		return tu.Std.Layer(lyrID)
+	}
+	if tu.Mvt != nil {
+		return tu.Mvt.Layer(lyrID)
+	}
+	return nil, false
+}
+
 // AddLayer add layer to the Tiler. It will only return Std layers if
 // STD is defined other the MVT layers
 func (tu TilerUnion) AddLayer(config dict.Dicter) error {
@@ -275,35 +287,35 @@ func (tu TilerUnion) AddLayer(config dict.Dicter) error {
 }
 
 //LayerExtent xxx
-func (tu TilerUnion) LayerExtent(lryID string) (geom.Extent, error) {
+func (tu TilerUnion) LayerExtent(lyrID string) (geom.Extent, error) {
 	if tu.Std != nil {
-		return tu.Std.LayerExtent(lryID)
+		return tu.Std.LayerExtent(lyrID)
 	}
 	if tu.Mvt != nil {
-		return tu.Mvt.LayerExtent(lryID)
+		return tu.Mvt.LayerExtent(lyrID)
 	}
 	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
 	return ext, ErrNilInitFunc
 }
 
 //LayerMinZoom xxx
-func (tu TilerUnion) LayerMinZoom(lryID string) int {
+func (tu TilerUnion) LayerMinZoom(lyrID string) int {
 	if tu.Std != nil {
-		return tu.Std.LayerMinZoom(lryID)
+		return tu.Std.LayerMinZoom(lyrID)
 	}
 	if tu.Mvt != nil {
-		return tu.Mvt.LayerMinZoom(lryID)
+		return tu.Mvt.LayerMinZoom(lyrID)
 	}
 	return 0
 }
 
 //LayerMaxZoom xxx
-func (tu TilerUnion) LayerMaxZoom(lryID string) int {
+func (tu TilerUnion) LayerMaxZoom(lyrID string) int {
 	if tu.Std != nil {
-		return tu.Std.LayerMaxZoom(lryID)
+		return tu.Std.LayerMaxZoom(lyrID)
 	}
 	if tu.Mvt != nil {
-		return tu.Mvt.LayerMaxZoom(lryID)
+		return tu.Mvt.LayerMaxZoom(lyrID)
 	}
 	return 16
 }

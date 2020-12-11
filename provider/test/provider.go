@@ -78,6 +78,7 @@ type TileProvider struct {
 func (tp *TileProvider) Layers() ([]provider.LayerInfo, error) {
 	return []provider.LayerInfo{
 		layer{
+			id:       "test-layer",
 			name:     "test-layer",
 			geomType: geom.Polygon{},
 			srid:     tegola.WebMercator,
@@ -109,6 +110,16 @@ func (tp *TileProvider) MVTForLayers(ctx context.Context, _ provider.Tile, _ []p
 		return nil, nil
 	}
 	return tp.MVTTile, nil
+}
+
+// Layer returns the configured layers, there is always only one "test-layer"
+func (tp *TileProvider) Layer(lyrID string) (provider.LayerInfo, bool) {
+	return layer{
+			name:     "test-layer",
+			geomType: geom.Polygon{},
+			srid:     tegola.WebMercator,
+		},
+		true
 }
 
 //AddLayer xxx

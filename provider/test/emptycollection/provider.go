@@ -53,6 +53,16 @@ func (tp *TileProvider) TileFeatures(ctx context.Context, layer string, t provid
 	return fn(&debugTileOutline)
 }
 
+// Layer xxx
+func (tp *TileProvider) Layer(lyrID string) (provider.LayerInfo, bool) {
+	l := layer{
+		name:     "empty_geom_collection",
+		geomType: geom.Collection{},
+		srid:     tegola.WebMercator,
+	}
+	return l, true
+}
+
 //AddLayer xxx
 func (tp *TileProvider) AddLayer(config dict.Dicter) error {
 	return nil

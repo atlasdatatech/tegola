@@ -77,6 +77,67 @@ func genSQL(l *Layer, pool *pgx.ConnPool, tblname string, flds []string, buffer 
 	return fmt.Sprintf(stdSQL, selectClause, tblname, l.geomField), nil
 }
 
+// genSQL will fill in the SQL field of a layer given a pool, and list of fields.
+func genMvtSQL(l *Layer, pool *pgx.ConnPool, tblname string, flds []string, buffer bool) (sql string, err error) {
+
+	// we need to hit the database to see what the fields are.
+	if len(flds) == 0 {
+		sql := fmt.Sprintf(fldsSQL, tblname)
+
+		//	if a subquery is set in the 'sql' config the subquery is set to the layer's
+		//	'tablename' param. because of this case normal SQL token replacement needs to be
+		//	applied to tablename SQL generation
+		tile := provider.NewTile(0, 0, 0, 64, tegola.WebMercator)
+		sql, err = replaceTokens(sql, l, tile, buffer)
+		if err != nil {
+			return "", err
+		}
+
+		rows, err := pool.Query(sql)
+		if err != nil {
+			return "", err
+		}
+		defer rows.Close()
+
+		fdescs := rows.FieldDescriptions()
+		if len(fdescs) == 0 {
+			return "", fmt.Errorf("No fields were returned for table %v", tblname)
+		}
+
+		// to avoid field names possibly colliding with Postgres keywords,
+		// we wrap the field names in quotes
+		for i := range fdescs {
+			flds = append(flds, fdescs[i].Name)
+		}
+	}
+
+	fgeom := -1
+
+	for i, f := range flds {
+		if f == l.geomField {
+			fgeom = i
+		}
+		flds[i] = fmt.Sprintf(`"%v"`, flds[i])
+	}
+
+	// to avoid field names possibly colliding with Postgres keywords,
+	// we wrap the field names in quotes
+	if fgeom == -1 {
+		flds = append(flds, fmt.Sprintf(`ST_AsMVTGeom(%v,%s) AS "%[1]v"`, l.geomField, bboxToken))
+	} else {
+		flds[fgeom] = fmt.Sprintf(`ST_AsMVTGeom(%v,%s) AS "%[1]v"`, l.geomField, bboxToken)
+	}
+
+	// add required id field
+	if l.idField != "" {
+		flds = append(flds, fmt.Sprintf(`"%v"`, l.idField))
+	}
+
+	selectClause := strings.Join(flds, ", ")
+
+	return fmt.Sprintf(stdSQL, selectClause, tblname, l.geomField), nil
+}
+
 const (
 	bboxToken             = "!BBOX!"
 	zoomToken             = "!ZOOM!"

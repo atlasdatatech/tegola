@@ -65,6 +65,7 @@ const (
 	ConfigKeyMaxConn     = "max_connections"
 	ConfigKeySRID        = "srid"
 	ConfigKeyLayers      = "layers"
+	ConfigKeyLayerID     = "id"
 	ConfigKeyLayerName   = "name"
 	ConfigKeyTablename   = "tablename"
 	ConfigKeySQL         = "sql"
@@ -72,6 +73,7 @@ const (
 	ConfigKeyGeomField   = "geometry_fieldname"
 	ConfigKeyGeomIDField = "id_fieldname"
 	ConfigKeyGeomType    = "geometry_type"
+	ConfigKeyLayerType   = "type"
 )
 
 // isSelectQuery is a regexp to check if a query starts with `SELECT`,
@@ -194,140 +196,16 @@ func CreateProvider(config dict.Dicter) (*Provider, error) {
 		return nil, fmt.Errorf("Failed while creating connection pool: %v", err)
 	}
 
+	//初始化layers容器
+	p.layers = make(map[string]Layer)
+
 	layers, err := config.MapSlice(ConfigKeyLayers)
 	if err != nil {
 		return nil, err
 	}
-
-	lyrs := make(map[string]Layer)
-	lyrsSeen := make(map[string]int)
-
-	for i, layer := range layers {
-
-		lname, err := layer.String(ConfigKeyLayerName, nil)
-		if err != nil {
-			return nil, fmt.Errorf("For layer (%v) we got the following error trying to get the layer's name field: %v", i, err)
-		}
-
-		if j, ok := lyrsSeen[lname]; ok {
-			return nil, fmt.Errorf("%v layer name is duplicated in both layer %v and layer %v", lname, i, j)
-		}
-
-		lyrsSeen[lname] = i
-		if i == 0 {
-			p.firstlayer = lname
-		}
-
-		fields, err := layer.StringSlice(ConfigKeyFields)
-		if err != nil {
-			return nil, fmt.Errorf("for layer (%v) %v %v field had the following error: %v", i, lname, ConfigKeyFields, err)
-		}
-
-		geomfld := "geom"
-		geomfld, err = layer.String(ConfigKeyGeomField, &geomfld)
-		if err != nil {
-			return nil, fmt.Errorf("for layer (%v) %v : %v", i, lname, err)
-		}
-
-		idfld := ""
-		idfld, err = layer.String(ConfigKeyGeomIDField, &idfld)
-		if err != nil {
-			return nil, fmt.Errorf("for layer (%v) %v : %v", i, lname, err)
-		}
-		if idfld == geomfld {
-			return nil, fmt.Errorf("for layer (%v) %v: %v (%v) and %v field (%v) is the same", i, lname, ConfigKeyGeomField, geomfld, ConfigKeyGeomIDField, idfld)
-		}
-
-		geomType := ""
-		geomType, err = layer.String(ConfigKeyGeomType, &geomType)
-		if err != nil {
-			return nil, fmt.Errorf("for layer (%v) %v : %v", i, lname, err)
-		}
-
-		var tblName string
-		tblName, err = layer.String(ConfigKeyTablename, &lname)
-		if err != nil {
-			return nil, fmt.Errorf("for %v layer (%v) %v has an error: %v", i, lname, ConfigKeyTablename, err)
-		}
-
-		var sql string
-		sql, err = layer.String(ConfigKeySQL, &sql)
-		if err != nil {
-			return nil, fmt.Errorf("for %v layer (%v) %v has an error: %v", i, lname, ConfigKeySQL, err)
-		}
-
-		if tblName != lname && sql != "" {
-			log.Printf("both %v and %v field are specified for layer (%v) %v, using only %[2]v field.", ConfigKeyTablename, ConfigKeySQL, i, lname)
-		}
-
-		var lsrid = srid
-		if lsrid, err = layer.Int(ConfigKeySRID, &lsrid); err != nil {
-			return nil, err
-		}
-
-		l := Layer{
-			name:      lname,
-			idField:   idfld,
-			geomField: geomfld,
-			srid:      uint64(lsrid),
-		}
-
-		if sql != "" && !isSelectQuery.MatchString(sql) {
-			// if it is not a SELECT query, then we assume we have a sub-query
-			// (`(select ...) as foo`) which we can handle like a tablename
-			tblName = sql
-			sql = ""
-		}
-
-		if sql != "" {
-			// convert !BOX! (MapServer) and !bbox! (Mapnik) to !BBOX! for compatibility
-			sql := strings.Replace(strings.Replace(sql, "!BOX!", "!BBOX!", -1), "!bbox!", "!BBOX!", -1)
-			// make sure that the sql has a !BBOX! token
-			if !strings.Contains(sql, bboxToken) {
-				return nil, fmt.Errorf("SQL for layer (%v) %v is missing required token: %v", i, lname, bboxToken)
-			}
-			if !strings.Contains(sql, "*") {
-				if !strings.Contains(sql, geomfld) {
-					return nil, fmt.Errorf("SQL for layer (%v) %v does not contain the geometry field: %v", i, lname, geomfld)
-				}
-				if !strings.Contains(sql, idfld) {
-					return nil, fmt.Errorf("SQL for layer (%v) %v does not contain the id field for the geometry: %v", i, lname, sql)
-				}
-			}
-
-			l.sql = sql
-		} else {
-			// Tablename and Fields will be used to build the query.
-			// We need to do some work. We need to check to see Fields contains the geom and gid fields
-			// and if not add them to the list. If Fields list is empty/nil we will use '*' for the field list.
-			l.sql, err = genSQL(&l, p.pool, tblName, fields, true)
-			if err != nil {
-				return nil, fmt.Errorf("could not generate sql, for layer(%v): %v", lname, err)
-			}
-		}
-
-		if debugLayerSQL {
-			log.Printf("SQL for Layer(%v):\n%v\n", lname, l.sql)
-		}
-
-		// set the layer geom type
-		if geomType != "" {
-			if err = p.setLayerGeomType(&l, geomType); err != nil {
-				return nil, fmt.Errorf("error fetching geometry type for layer (%v): %v", l.name, err)
-			}
-		} else {
-			// bbox, _ := p.inspectLayerExtent(&l)
-			// minz := p.inspectLayerMaxZoom(&l)
-			// maxz := p.inspectLayerMinZoom(&l)
-			// fmt.Println(bbox, minz, maxz)
-			if err = p.inspectLayerGeomType(&l); err != nil {
-				return nil, fmt.Errorf("error fetching geometry type for layer (%v): %v", l.name, err)
-			}
-		}
-
-		lyrs[lname] = l
+	for _, layer := range layers {
+		p.AddLayer(layer)
 	}
-	p.layers = lyrs
 
 	// track the provider so we can clean it up later
 	providers = append(providers, p)
@@ -420,7 +298,7 @@ func (p Provider) setLayerGeomType(l *Layer, geomType string) error {
 // and reading the geom type in the result set
 func (p Provider) inspectLayerGeomType(l *Layer) error {
 	var err error
-
+	sql := ""
 	// we want to know the geom type instead of returning the geom data so we modify the SQL
 	// TODO (arolek): this strategy wont work if remove the requirement of wrapping ST_AsBinary(geom) in the SQL statements.
 	//
@@ -428,8 +306,22 @@ func (p Provider) inspectLayerGeomType(l *Layer) error {
 	//
 	// case insensitive search
 	re := regexp.MustCompile(`(?i)ST_AsBinary`)
+	if re.MatchString(l.sql) {
+		sql = re.ReplaceAllString(l.sql, "ST_GeometryType")
+	} else {
+		rgx := regexp.MustCompile(`(?i)ST_AsMVTGeom\((.*?),`)
+		rs := rgx.FindStringSubmatch(l.sql)
+		if 2 == len(rs) {
+			l.geomField = rs[1] //更新geomfield
+		}
 
-	sql := re.ReplaceAllString(l.sql, "ST_GeometryType")
+		var rgx1 = regexp.MustCompile(`(?i)select(.*?)(?i)from`)
+		idx := rgx1.FindStringIndex(l.sql)
+		if 2 == len(idx) {
+			rps := fmt.Sprintf("SELECT ST_GeometryType(%s) FROM", l.geomField)
+			sql = strings.Replace(l.sql, l.sql[idx[0]:idx[1]], rps, 1)
+		}
+	}
 
 	// we only need a single result set to sniff out the geometry type
 	sql = fmt.Sprintf("%v LIMIT 1", sql)
@@ -502,6 +394,12 @@ func (p Provider) inspectLayerExtent(l *Layer) (geom.Extent, error) {
 		rs := rgx.FindStringSubmatch(l.sql[idx[1]:])
 		if 2 == len(rs) {
 			l.geomField = rs[1]
+		}
+	} else {
+		rgx := regexp.MustCompile(`(?i)ST_AsMVTGeom\((.*?),`)
+		rs := rgx.FindStringSubmatch(l.sql)
+		if 2 == len(rs) {
+			l.geomField = rs[1] //更新geomfield
 		}
 	}
 	var sql string
@@ -598,41 +496,37 @@ func (p Provider) inspectLayerMaxZoom(l *Layer) int {
 
 // Layer fetches an individual layer from the provider, if it's configured
 // if no name is provider, the first layer is returned
-func (p *Provider) Layer(name string) (Layer, bool) {
-	if name == "" {
-		return p.layers[p.firstlayer], true
-	}
-
-	layer, ok := p.layers[name]
+func (p *Provider) Layer(lryID string) (provider.LayerInfo, bool) {
+	layer, ok := p.layers[lryID]
 	return layer, ok
 }
 
 // Layers returns meta data about the various layers which are configured with the provider
 func (p *Provider) Layers() ([]provider.LayerInfo, error) {
 	var ls []provider.LayerInfo
-
 	for i := range p.layers {
 		ls = append(ls, p.layers[i])
 	}
-
 	return ls, nil
 }
 
 // TileFeatures adheres to the provider.Tiler interface
-func (p *Provider) TileFeatures(ctx context.Context, layer string, tile provider.Tile, fn func(f *provider.Feature) error) error {
+func (p *Provider) TileFeatures(ctx context.Context, lyrID string, tile provider.Tile, fn func(f *provider.Feature) error) error {
 	// fetch the provider layer
+	// plyr, ok := p.Layer(layerid)
 
-	plyr, ok := p.Layer(layer)
+	plyr, ok := p.layers[lyrID]
 	if !ok {
-		return ErrLayerNotFound{layer}
+		return ErrLayerNotFound{lyrID}
 	}
+
 	sql, err := replaceTokens(plyr.sql, &plyr, tile, true)
 	if err != nil {
-		return fmt.Errorf("error replacing layer tokens for layer (%v) SQL (%v): %v", layer, sql, err)
+		return fmt.Errorf("error replacing layer tokens for layer (%v) SQL (%v): %v", lyrID, sql, err)
 	}
 
 	if debugExecuteSQL {
-		log.Printf("TEGOLA_SQL_DEBUG:EXECUTE_SQL for layer (%v): %v", layer, sql)
+		log.Printf("TEGOLA_SQL_DEBUG:EXECUTE_SQL for layer (%v): %v", lyrID, sql)
 	}
 
 	// context check
@@ -642,7 +536,7 @@ func (p *Provider) TileFeatures(ctx context.Context, layer string, tile provider
 
 	rows, err := p.pool.Query(sql)
 	if err != nil {
-		return fmt.Errorf("error running layer (%v) SQL (%v): %v", layer, sql, err)
+		return fmt.Errorf("error running layer (%v) SQL (%v): %v", lyrID, sql, err)
 	}
 	defer rows.Close()
 
@@ -674,7 +568,7 @@ func (p *Provider) TileFeatures(ctx context.Context, layer string, tile provider
 		// fetch row values
 		vals, err := rows.Values()
 		if err != nil {
-			return fmt.Errorf("error running layer (%v) SQL (%v): %v", layer, sql, err)
+			return fmt.Errorf("error running layer (%v) SQL (%v): %v", lyrID, sql, err)
 		}
 
 		gid, geobytes, tags, err := decipherFields(ctx, plyr.GeomFieldName(), plyr.IDFieldName(), fdescs, vals)
@@ -697,15 +591,15 @@ func (p *Provider) TileFeatures(ctx context.Context, layer string, tile provider
 		if err != nil {
 			switch err.(type) {
 			case wkb.ErrUnknownGeometryType:
-				rplfn := layer + ":" + plyr.GeomFieldName()
+				rplfn := lyrID + ":" + plyr.GeomFieldName()
 				// Only report to the log once. This is to prevent the logs from filling up if there are many geometries in the layer
 				if reportedLayerFieldName == "" || reportedLayerFieldName == rplfn {
 					reportedLayerFieldName = rplfn
-					log.Printf("[WARNING] Ignoring unsupported geometry in layer (%v). Only basic 2D geometry type are supported. Try using `ST_Force2D(%v)`.", layer, plyr.GeomFieldName())
+					log.Printf("[WARNING] Ignoring unsupported geometry in layer (%v). Only basic 2D geometry type are supported. Try using `ST_Force2D(%v)`.", lyrID, plyr.GeomFieldName())
 				}
 				continue
 			default:
-				return fmt.Errorf("unable to decode layer (%v) geometry field (%v) into wkb where (%v = %v): %v", layer, plyr.GeomFieldName(), plyr.IDFieldName(), gid, err)
+				return fmt.Errorf("unable to decode layer (%v) geometry field (%v) into wkb where (%v = %v): %v", lyrID, plyr.GeomFieldName(), plyr.IDFieldName(), gid, err)
 			}
 		}
 
@@ -736,11 +630,12 @@ func (p *Provider) MVTForLayers(ctx context.Context, tile provider.Tile, layers 
 		if debug {
 			log.Printf("looking for layer: %v", layers[i])
 		}
-		l, ok := p.Layer(layers[i].Name)
+
+		l, ok := p.layers[layers[i].ID]
 		if !ok {
 			// Should we be erroring here, or have a flag so that we don't
 			// spam the user?
-			log.Printf("provider layer not found %v", layers[i].Name)
+			log.Printf("provider layer not found %v", layers[i].ID)
 		}
 		if debugLayerSQL {
 			log.Printf("SQL for Layer(%v):\n%v\n", l.Name(), l.sql)
@@ -749,20 +644,31 @@ func (p *Provider) MVTForLayers(ctx context.Context, tile provider.Tile, layers 
 		if err != nil {
 			return nil, err
 		}
-
+		// fmt.Println(sql)
 		// ref: https://postgis.net/docs/ST_AsMVT.html
 		// bytea ST_AsMVT(anyelement row, text name, integer extent, text geom_name, text feature_id_name)
-		sqls = append(sqls, fmt.Sprintf(
-			`(SELECT ST_AsMVT(q,'%s',%d,'%s','%s') AS data FROM (%s) AS q)`,
+		asmvt := fmt.Sprintf(
+			`(SELECT ST_AsMVT(q,'%s',%d,'%s') AS data FROM (%s) AS q)`,
 			layers[i].MVTName,
 			tegola.DefaultExtent,
 			l.GeomFieldName(),
-			l.IDFieldName(),
 			sql,
-		))
+		)
+		if "" != l.IDFieldName() {
+			asmvt = fmt.Sprintf(
+				`(SELECT ST_AsMVT(q,'%s',%d,'%s','%s') AS data FROM (%s) AS q)`,
+				layers[i].MVTName,
+				tegola.DefaultExtent,
+				l.GeomFieldName(),
+				l.IDFieldName(),
+				sql,
+			)
+		}
+		sqls = append(sqls, asmvt)
 	}
 	subsqls := strings.Join(sqls, "||")
 	fsql := fmt.Sprintf(`SELECT (%s) AS data`, subsqls)
+	// fmt.Println(fsql)
 	var data pgtype.Bytea
 	if debugExecuteSQL {
 		log.Printf("%s:%s: %v", EnvSQLDebugName, EnvSQLDebugExecute, fsql)
@@ -805,59 +711,65 @@ func Cleanup() {
 
 // AddLayer 添加驱动层
 func (p *Provider) AddLayer(layer dict.Dicter) error {
+
+	lid, err := layer.String(ConfigKeyLayerID, nil)
+	if err != nil {
+		return fmt.Errorf("AddLayer, we got the following error trying to get the layer's name field: %v", err)
+	}
+
+	if j, ok := p.layers[lid]; ok {
+		return fmt.Errorf("%v layer name is duplicated", lid, j)
+	}
+
+	if len(p.layers) == 0 {
+		p.firstlayer = lid
+	}
+
 	lname, err := layer.String(ConfigKeyLayerName, nil)
 	if err != nil {
 		return fmt.Errorf("AddLayer, we got the following error trying to get the layer's name field: %v", err)
 	}
 
-	if j, ok := p.layers[lname]; ok {
-		return fmt.Errorf("%v layer name is duplicated", lname, j)
-	}
-
-	if len(p.layers) == 0 {
-		p.firstlayer = lname
-	}
-
 	fields, err := layer.StringSlice(ConfigKeyFields)
 	if err != nil {
-		return fmt.Errorf("for layer (%v) %v field had the following error: %v", lname, ConfigKeyFields, err)
+		return fmt.Errorf("for layer (%v) %v field had the following error: %v", lid, ConfigKeyFields, err)
 	}
 
 	geomfld := "geom"
 	geomfld, err = layer.String(ConfigKeyGeomField, &geomfld)
 	if err != nil {
-		return fmt.Errorf("for layer (%v) : %v", lname, err)
+		return fmt.Errorf("for layer (%v) : %v", lid, err)
 	}
 
 	idfld := ""
 	idfld, err = layer.String(ConfigKeyGeomIDField, &idfld)
 	if err != nil {
-		return fmt.Errorf("for layer (%v) : %v", lname, err)
+		return fmt.Errorf("for layer (%v) : %v", lid, err)
 	}
 	if idfld == geomfld {
-		return fmt.Errorf("for layer %v: %v (%v) and %v field (%v) is the same", lname, ConfigKeyGeomField, geomfld, ConfigKeyGeomIDField, idfld)
+		return fmt.Errorf("for layer %v: %v (%v) and %v field (%v) is the same", lid, ConfigKeyGeomField, geomfld, ConfigKeyGeomIDField, idfld)
 	}
 
 	geomType := ""
 	geomType, err = layer.String(ConfigKeyGeomType, &geomType)
 	if err != nil {
-		return fmt.Errorf("for layer  %v : %v", lname, err)
+		return fmt.Errorf("for layer  %v : %v", lid, err)
 	}
 
 	var tblName string
 	tblName, err = layer.String(ConfigKeyTablename, &lname)
 	if err != nil {
-		return fmt.Errorf("forlayer (%v) %v has an error: %v", lname, ConfigKeyTablename, err)
+		return fmt.Errorf("forlayer (%v) %v has an error: %v", lid, ConfigKeyTablename, err)
 	}
 
 	var sql string
 	sql, err = layer.String(ConfigKeySQL, &sql)
 	if err != nil {
-		return fmt.Errorf("for layer (%v) %v has an error: %v", lname, ConfigKeySQL, err)
+		return fmt.Errorf("for layer (%v) %v has an error: %v", lid, ConfigKeySQL, err)
 	}
 
 	if tblName != lname && sql != "" {
-		log.Printf("both %v and %v field are specified for layer (%v), using only %[2]v field.", ConfigKeyTablename, ConfigKeySQL, lname)
+		log.Printf("both %v and %v field are specified for layer (%v), using only %[2]v field.", ConfigKeyTablename, ConfigKeySQL, lid)
 	}
 
 	var lsrid = int(p.srid)
@@ -866,6 +778,7 @@ func (p *Provider) AddLayer(layer dict.Dicter) error {
 	}
 
 	l := Layer{
+		id:        lid,
 		name:      lname,
 		idField:   idfld,
 		geomField: geomfld,
@@ -884,14 +797,14 @@ func (p *Provider) AddLayer(layer dict.Dicter) error {
 		sql := strings.Replace(strings.Replace(sql, "!BOX!", "!BBOX!", -1), "!bbox!", "!BBOX!", -1)
 		// make sure that the sql has a !BBOX! token
 		if !strings.Contains(sql, bboxToken) {
-			return fmt.Errorf("SQL for layer (%v) is missing required token: %v", lname, bboxToken)
+			return fmt.Errorf("SQL for layer (%v) is missing required token: %v", lid, bboxToken)
 		}
 		if !strings.Contains(sql, "*") {
 			if !strings.Contains(sql, geomfld) {
-				return fmt.Errorf("SQL for layer (%v) does not contain the geometry field: %v", lname, geomfld)
+				return fmt.Errorf("SQL for layer (%v) does not contain the geometry field: %v", lid, geomfld)
 			}
 			if !strings.Contains(sql, idfld) {
-				return fmt.Errorf("SQL for layer (%v) does not contain the id field for the geometry: %v", lname, idfld)
+				return fmt.Errorf("SQL for layer (%v) does not contain the id field for the geometry: %v", lid, idfld)
 			}
 		}
 
@@ -900,35 +813,41 @@ func (p *Provider) AddLayer(layer dict.Dicter) error {
 		// Tablename and Fields will be used to build the query.
 		// We need to do some work. We need to check to see Fields contains the geom and gid fields
 		// and if not add them to the list. If Fields list is empty/nil we will use '*' for the field list.
-		l.sql, err = genSQL(&l, p.pool, tblName, fields, true)
+		//默认mvt
+		layerType, _ := layer.String(ConfigKeyLayerType, nil)
+		if layerType == "postgis" {
+			l.sql, err = genSQL(&l, p.pool, tblName, fields, true)
+		} else {
+			l.sql, err = genMvtSQL(&l, p.pool, tblName, fields, true)
+		}
 		if err != nil {
-			return fmt.Errorf("could not generate sql, for layer(%v): %v", lname, err)
+			return fmt.Errorf("could not generate sql, for layer(%v): %v", lid, err)
 		}
 	}
 
 	if strings.Contains(os.Getenv("TEGOLA_SQL_DEBUG"), "LAYER_SQL") {
-		log.Printf("SQL for Layer(%v):\n%v\n", lname, l.sql)
+		log.Printf("SQL for Layer(%v):\n%v\n", lid, l.sql)
 	}
 
 	// set the layer geom type
 	if geomType != "" {
 		if err = p.setLayerGeomType(&l, geomType); err != nil {
-			return fmt.Errorf("error fetching geometry type for layer (%v): %v", l.name, err)
+			return fmt.Errorf("error fetching geometry type for layer (%v): %v", lid, err)
 		}
 	} else {
 		if err = p.inspectLayerGeomType(&l); err != nil {
-			return fmt.Errorf("error fetching geometry type for layer (%v): %v", l.name, err)
+			return fmt.Errorf("error fetching geometry type for layer (%v): %v", lid, err)
 		}
 	}
 
-	p.layers[lname] = l
+	p.layers[lid] = l
 	return nil
 }
 
 // LayerExtent xxx
-func (p *Provider) LayerExtent(lryID string) (geom.Extent, error) {
+func (p *Provider) LayerExtent(lyrID string) (geom.Extent, error) {
 	ext := geom.Extent{-180.0, -85.05112877980659, 180.0, 85.0511287798066}
-	layer, ok := p.layers[lryID]
+	layer, ok := p.layers[lyrID]
 	if !ok {
 		return ext, fmt.Errorf("layer id not exist")
 	}

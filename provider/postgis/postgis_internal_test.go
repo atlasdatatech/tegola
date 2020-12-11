@@ -85,10 +85,10 @@ func TestMVTProviders(t *testing.T) {
 
 	type tcase struct {
 		TCConfig
-		layerNames []string
-		mvtTile    []byte
-		err        string
-		tile       provider.Tile
+		layerIDs []string
+		mvtTile  []byte
+		err      string
+		tile     provider.Tile
 	}
 	fn := func(tc tcase) func(t *testing.T) {
 		return func(t *testing.T) {
@@ -106,12 +106,12 @@ func TestMVTProviders(t *testing.T) {
 				t.Errorf("NewMVTTileProvider unexpected error: %v", err)
 				return
 			}
-			layers := make([]provider.Layer, len(tc.layerNames))
+			layers := make([]provider.Layer, len(tc.layerIDs))
 
-			for i := range tc.layerNames {
+			for i := range tc.layerIDs {
 				layers[i] = provider.Layer{
-					Name:    tc.layerNames[i],
-					MVTName: tc.layerNames[i],
+					ID:      tc.layerIDs[i],
+					MVTName: tc.layerIDs[i],
 				}
 			}
 			mvtTile, err := prvd.MVTForLayers(context.Background(), tc.tile, layers)
@@ -138,9 +138,9 @@ func TestMVTProviders(t *testing.T) {
 					},
 				},
 			},
-			layerNames: []string{"land"},
-			mvtTile:    make([]byte, 174689),
-			tile:       provider.NewTile(0, 0, 0, 16, 4326),
+			layerIDs: []string{"land"},
+			mvtTile:  make([]byte, 174689),
+			tile:     provider.NewTile(0, 0, 0, 16, 4326),
 		},
 	}
 	for name, tc := range tests {

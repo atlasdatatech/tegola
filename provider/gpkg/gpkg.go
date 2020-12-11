@@ -77,10 +77,10 @@ func (p *Provider) Layers() ([]provider.LayerInfo, error) {
 	return ls, nil
 }
 
-func (p *Provider) TileFeatures(ctx context.Context, layer string, tile provider.Tile, fn func(f *provider.Feature) error) error {
-	log.Debugf("fetching layer %v", layer)
+func (p *Provider) TileFeatures(ctx context.Context, lyrID string, tile provider.Tile, fn func(f *provider.Feature) error) error {
+	log.Debugf("fetching layer %v", lyrID)
 
-	pLayer := p.layers[layer]
+	pLayer := p.layers[lyrID]
 
 	// read the tile extent
 	tileBBox, tileSRID := tile.BufferedExtent()
@@ -263,6 +263,12 @@ func geomNameToGeom(name string) (geom.Geometry, error) {
 	}
 
 	return nil, fmt.Errorf("unsupported geometry type: %v", name)
+}
+
+// Layer xxx
+func (p *Provider) Layer(lyrID string) (provider.LayerInfo, bool) {
+	l, ok := p.layers[lyrID]
+	return l, ok
 }
 
 // AddLayer xxx

@@ -28,11 +28,13 @@ func TestMapFilterLayersByZoom(t *testing.T) {
 			atlasMap: atlas.Map{
 				Layers: []atlas.Layer{
 					{
+						ID:      "layer1",
 						Name:    "layer1",
 						MinZoom: 0,
 						MaxZoom: 2,
 					},
 					{
+						ID:      "layer2",
 						Name:    "layer2",
 						MinZoom: 1,
 						MaxZoom: 5,
@@ -43,6 +45,7 @@ func TestMapFilterLayersByZoom(t *testing.T) {
 			expected: atlas.Map{
 				Layers: []atlas.Layer{
 					{
+						ID:      "layer2",
 						Name:    "layer2",
 						MinZoom: 1,
 						MaxZoom: 5,
@@ -54,11 +57,13 @@ func TestMapFilterLayersByZoom(t *testing.T) {
 			atlasMap: atlas.Map{
 				Layers: []atlas.Layer{
 					{
+						ID:      "layer1",
 						Name:    "layer1",
 						MinZoom: 0,
 						MaxZoom: 2,
 					},
 					{
+						ID:      "layer2",
 						Name:    "layer2",
 						MinZoom: 1,
 						MaxZoom: 5,
@@ -69,11 +74,13 @@ func TestMapFilterLayersByZoom(t *testing.T) {
 			expected: atlas.Map{
 				Layers: []atlas.Layer{
 					{
+						ID:      "layer1",
 						Name:    "layer1",
 						MinZoom: 0,
 						MaxZoom: 2,
 					},
 					{
+						ID:      "layer2",
 						Name:    "layer2",
 						MinZoom: 1,
 						MaxZoom: 5,
@@ -95,6 +102,7 @@ func TestMapFilterLayersByZoom(t *testing.T) {
 func TestMapFilterLayersByName(t *testing.T) {
 	testcases := []struct {
 		grid     atlas.Map
+		id       string
 		name     string
 		expected atlas.Map
 	}{
@@ -102,21 +110,25 @@ func TestMapFilterLayersByName(t *testing.T) {
 			grid: atlas.Map{
 				Layers: []atlas.Layer{
 					{
+						ID:      "layer1",
 						Name:    "layer1",
 						MinZoom: 0,
 						MaxZoom: 2,
 					},
 					{
+						ID:      "layer2",
 						Name:    "layer2",
 						MinZoom: 1,
 						MaxZoom: 5,
 					},
 				},
 			},
+			id:   "layer1",
 			name: "layer1",
 			expected: atlas.Map{
 				Layers: []atlas.Layer{
 					{
+						ID:      "layer1",
 						Name:    "layer1",
 						MinZoom: 0,
 						MaxZoom: 2,
@@ -127,7 +139,7 @@ func TestMapFilterLayersByName(t *testing.T) {
 	}
 
 	for i, tc := range testcases {
-		output := tc.grid.FilterLayersByName(tc.name)
+		output := tc.grid.FilterLayersByID(tc.id)
 
 		if !reflect.DeepEqual(output, tc.expected) {
 			t.Errorf("testcase (%v) failed. output \n\n%+v\n\n does not match expected \n\n%+v", i, output, tc.expected)

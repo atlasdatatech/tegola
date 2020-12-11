@@ -63,6 +63,7 @@ type Map struct {
 type MapLayer struct {
 	// Name is optional. If it's not defined the name of the ProviderLayer will be used.
 	// Name can also be used to group multiple ProviderLayers under the same namespace.
+	ID            env.String  `toml:"id"`
 	Name          env.String  `toml:"name"`
 	ProviderLayer env.String  `toml:"provider_layer"`
 	MinZoom       *env.Uint   `toml:"min_zoom"`
@@ -76,8 +77,8 @@ type MapLayer struct {
 	DontClip env.Bool `toml:"dont_clip"`
 }
 
-// ProviderLayerName returns the names of the layer and provider or an error
-func (ml MapLayer) ProviderLayerName() (provider, layer string, err error) {
+// ProviderLayerID returns the id of the layer and provider or an error
+func (ml MapLayer) ProviderLayerID() (provider, layer string, err error) {
 	// split the provider layer (syntax is provider.layer)
 	plParts := strings.Split(string(ml.ProviderLayer), ".")
 	if len(plParts) != 2 {
@@ -93,7 +94,7 @@ func (ml MapLayer) GetName() (string, error) {
 	if ml.Name != "" {
 		return string(ml.Name), nil
 	}
-	_, name, err := ml.ProviderLayerName()
+	_, name, err := ml.ProviderLayerID()
 	return name, err
 }
 
@@ -151,7 +152,7 @@ func (c *Config) Validate() error {
 		provider := ""
 		isMVTProvider := false
 		for layerKey, l := range m.Layers {
-			pname, _, err := l.ProviderLayerName()
+			prdID, _, err := l.ProviderLayerID()
 			if err != nil {
 				return err
 			}
@@ -160,14 +161,14 @@ func (c *Config) Validate() error {
 				// This is the first provider we found.
 				// For MVTProviders all others need to be the same, so store it
 				// so we can check later
-				provider = pname
+				provider = prdID
 			}
 
-			isMvt, doesExists := mvtproviders[pname]
+			isMvt, doesExists := mvtproviders[prdID]
 			if !doesExists {
 				return ErrInvalidProviderForMap{
 					MapName:      string(m.Name),
-					ProviderName: pname,
+					ProviderName: prdID,
 				}
 			}
 
@@ -177,14 +178,14 @@ func (c *Config) Validate() error {
 			isMVTProvider = isMVTProvider || isMvt
 
 			// only need to do this check if we are dealing with MVTProviders
-			if isMVTProvider && pname != provider {
+			if isMVTProvider && prdID != provider {
 				// for mvt_providers we can only have the same provider
 				// for all layers
 				// check to see
-				if mvtproviders[pname] || isMVTProvider {
+				if mvtproviders[prdID] || isMVTProvider {
 					return ErrMVTDifferentProviders{
 						Original: provider,
-						Current:  pname,
+						Current:  prdID,
 					}
 				}
 			}

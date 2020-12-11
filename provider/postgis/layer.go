@@ -4,6 +4,7 @@ import "github.com/go-spatial/geom"
 
 // layer holds information about a query.
 type Layer struct {
+	id string
 	// The Name of the layer
 	name string
 	// The SQL to use when querying PostGIS for this layer
@@ -15,7 +16,12 @@ type Layer struct {
 	// GeomType is the the type of geometry returned from the SQL
 	geomType geom.Geometry
 	// The SRID that the data in the table is stored in. This will default to WebMercator
-	srid uint64
+	srid   uint64
+	fields []string
+}
+
+func (l Layer) ID() string {
+	return l.id
 }
 
 func (l Layer) Name() string {

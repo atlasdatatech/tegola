@@ -33,12 +33,12 @@ func NewTileProvider(config dict.Dicter) (provider.Tiler, error) {
 type Provider struct{}
 
 // TileFeatures xxx
-func (p *Provider) TileFeatures(ctx context.Context, layer string, tile provider.Tile, fn func(f *provider.Feature) error) error {
+func (p *Provider) TileFeatures(ctx context.Context, lyrID string, tile provider.Tile, fn func(f *provider.Feature) error) error {
 
 	// get tile bounding box
 	ext, srid := tile.Extent()
 
-	switch layer {
+	switch lyrID {
 	case "debug-tile-outline":
 		debugTileOutline := provider.Feature{
 			ID:       0,
@@ -105,9 +105,31 @@ func (p *Provider) Layers() ([]provider.LayerInfo, error) {
 	return ls, nil
 }
 
+// Layer returns information about the various layers the provider supports
+func (p *Provider) Layer(lyrID string) (provider.LayerInfo, bool) {
+	if "debug-tile-center" == lyrID {
+		l := Layer{
+			id:       "debug-tile-outline",
+			name:     "debug-tile-outline",
+			geomType: geom.Line{},
+			srid:     tegola.WebMercator,
+		}
+		return l, true
+	} else if "debug-tile-outline" == lyrID {
+		l := Layer{
+			id:       "debug-tile-center",
+			name:     "debug-tile-center",
+			geomType: geom.Point{},
+			srid:     tegola.WebMercator,
+		}
+		return l, true
+	}
+	return nil, false
+}
+
 // AddLayer xxx
 func (p *Provider) AddLayer(config dict.Dicter) error {
-	return nil
+	return fmt.Errorf("can not add debug layer")
 }
 
 // LayerExtent xxx
